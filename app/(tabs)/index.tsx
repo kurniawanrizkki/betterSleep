@@ -1,25 +1,26 @@
-import React from 'react';
-import { 
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-} from 'react-native';
-import { 
-  Moon, 
-  Star,
-  BookOpen, 
-  Music, 
-  Wind,
-  User,
-  Sparkles,
-  Calendar
-} from 'lucide-react-native';
-import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dimensions } from 'react-native';
+import {
+  BookOpen, // Untuk Gratitude Notes
+  Calendar, // Untuk Jadwal
+  Moon,
+  Music, // Untuk Musik Relaksasi
+  Sparkles,
+  Star,
+  User
+} from 'lucide-react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  Animated,
+  Dimensions,
+  Easing,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -33,6 +34,14 @@ const sleepData = [
   { day: 'Sun', hours: 7.8 },
 ];
 
+// Data untuk kartu fitur baru
+const mainFeatures = [
+  { icon: BookOpen, label: 'Gratitude Notes', color: '#5B9BD5' },
+  { icon: Music, label: 'Musik Relaksasi', color: '#5B9BD5' },
+  // { icon: Feather, label: 'Meditasi', color: '#5B9BD5' },
+  { icon: Calendar, label: 'Jadwal Atur Tidur', color: '#5B9BD5' },
+];
+
 const colors = {
   card: '#FFFFFF',
   primary: '#5B9BD5',
@@ -44,24 +53,123 @@ const colors = {
   lightBg: '#E8F4F8',
 };
 
-// Simple Cloud Wave - ONE LAYER seperti reference
-const SimpleCloudWave = () => {
+// Animated Two-Layer Cloud Wave - Smooth animation
+const AnimatedSvg = Animated.createAnimatedComponent(Svg);
+const TwoLayerCloudWave = () => {
+  const translateX1 = useRef(new Animated.Value(0)).current;
+  const translateX2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Back layer animation - ping pong (bolak-balik)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(translateX1, {
+          toValue: -30,
+          duration: 5000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(translateX1, {
+          toValue: 0,
+          duration: 5000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        })
+      ])
+    ).start();
+
+    // Front layer animation - ping pong (bolak-balik) dengan timing berbeda
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(translateX2, {
+          toValue: 20,
+          duration: 5000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(translateX2, {
+          toValue: 0,
+          duration: 5000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        })
+      ])
+    ).start();
+  }, []);
+
   return (
-    <Svg height="120" width={screenWidth} style={styles.cloudWave}>
-      <Path
-        d={`
-          M 0,40
-          C ${screenWidth * 0.2},20 ${screenWidth * 0.3},30 ${screenWidth * 0.5},25
-          C ${screenWidth * 0.7},20 ${screenWidth * 0.8},35 ${screenWidth},30
-          L ${screenWidth},120
-          L 0,120
-          Z
-        `}
-        fill="#FFFFFF"
-      />
-    </Svg>
+    <View style={{ height: 120, width: screenWidth, overflow: 'hidden' }}>
+      {/* Back Layer - Animated */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: -50, // Extended left
+          transform: [{ translateX: translateX1 }]
+        }}
+      >
+        <Svg height="120" width={screenWidth + 100}>
+          <Path
+            d={`
+              M 0,70
+              C ${(screenWidth + 100) * 0.1},70 ${(screenWidth + 100) * 0.12},45 ${(screenWidth + 100) * 0.18},45
+              C ${(screenWidth + 100) * 0.24},45 ${(screenWidth + 100) * 0.26},65 ${(screenWidth + 100) * 0.32},65
+              C ${(screenWidth + 100) * 0.38},65 ${(screenWidth + 100) * 0.4},40 ${(screenWidth + 100) * 0.48},40
+              C ${(screenWidth + 100) * 0.56},40 ${(screenWidth + 100) * 0.58},60 ${(screenWidth + 100) * 0.66},60
+              C ${(screenWidth + 100) * 0.74},60 ${(screenWidth + 100) * 0.76},35 ${(screenWidth + 100) * 0.84},35
+              C ${(screenWidth + 100) * 0.92},35 ${(screenWidth + 100) * 0.94},55 ${(screenWidth + 100) * 0.98},55
+              C ${(screenWidth + 100) * 1.02},55 ${(screenWidth + 100) * 1.04},75 ${screenWidth + 100},75
+              L ${screenWidth + 100},120
+              L 0,120
+              Z
+            `}
+            fill="#F0F4F8"
+            opacity={0.6}
+          />
+        </Svg>
+      </Animated.View>
+      
+      {/* Front Layer - Animated */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: -30, // Extended left
+          transform: [{ translateX: translateX2 }]
+        }}
+      >
+        <Svg height="120" width={screenWidth + 60}>
+          <Path
+            d={`
+              M 0,85
+              C ${(screenWidth + 60) * 0.08},85 ${(screenWidth + 60) * 0.1},55 ${(screenWidth + 60) * 0.16},55
+              C ${(screenWidth + 60) * 0.22},55 ${(screenWidth + 60) * 0.24},75 ${(screenWidth + 60) * 0.3},75
+              C ${(screenWidth + 60) * 0.36},75 ${(screenWidth + 60) * 0.38},50 ${(screenWidth + 60) * 0.45},50
+              C ${(screenWidth + 60) * 0.52},50 ${(screenWidth + 60) * 0.54},70 ${(screenWidth + 60) * 0.6},70
+              C ${(screenWidth + 60) * 0.66},70 ${(screenWidth + 60) * 0.68},45 ${(screenWidth + 60) * 0.75},45
+              C ${(screenWidth + 60) * 0.82},45 ${(screenWidth + 60) * 0.84},80 ${(screenWidth + 60) * 0.92},80
+              C ${(screenWidth + 60) * 0.96},80 ${(screenWidth + 60) * 0.98},60 ${screenWidth + 60},60
+              L ${screenWidth + 60},120
+              L 0,120
+              Z
+            `}
+            fill="#FFFFFF"
+          />
+        </Svg>
+      </Animated.View>
+    </View>
   );
 };
+// Komponen baru untuk kartu fitur utama (Diubah: menerima isLarge)
+const MainFeatureCard = ({ icon: Icon, label, color, isLarge = false }) => (
+  <TouchableOpacity 
+    style={[styles.mainFeatureCard, isLarge && styles.largeFeatureCard]}
+    // Tambahkan style untuk kartu besar jika isLarge true
+  >
+    <Icon size={isLarge ? 40 : 30} color={color} />
+    <Text style={[styles.mainFeatureText, isLarge && styles.largeFeatureText]}>{label}</Text>
+  </TouchableOpacity>
+);
 
 export default function HomeScreen() {
   const avgSleep = (sleepData.reduce((sum, day) => sum + day.hours, 0) / sleepData.length).toFixed(1);
@@ -74,54 +182,47 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER - Simple gradient + cloud */}
+        {/* HEADER - Simple gradient + moon/stars + sleep display */}
         <LinearGradient
           colors={['#6B9DC3', '#8FB3D5', '#A7C7E7', '#C5DCF0']}
           style={styles.headerGradient}
         >
-          {/* Moon & Stars */}
-          <View style={styles.skyContent}>
-            <Star size={14} color="#FFD700" fill="#FFD700" style={styles.starTop} />
-            <View style={styles.moonContainer}>
-              <Moon size={60} color="#FFE5B4" fill="#FFE5B4" />
-            </View>
-            <Star size={12} color="#FFD700" fill="#FFD700" style={styles.starRight} />
-            <Star size={10} color="#FFD700" fill="#FFD700" style={styles.starBottom} />
-          </View>
-
-          {/* Cloud Wave at bottom */}
-          <View style={styles.cloudWaveContainer}>
-            <SimpleCloudWave />
-          </View>
-
-          {/* Profile */}
+          {/* Profile Button */}
           <TouchableOpacity style={styles.profileBtn}>
             <View style={styles.profileCircle}>
               <User size={18} color={colors.primary} />
             </View>
             <Text style={styles.byProfile}>by profile</Text>
           </TouchableOpacity>
+
+          {/* Moon, Stars & Sleep Data (NEW PLACEMENT) */}
+          <View style={styles.headerContent}>
+            {/* Moon & Stars */}
+            <View style={styles.moonContainer}>
+              <Star size={12} color="#FFD700" fill="#FFD700" style={styles.starRight} />
+              <Moon size={70} color="#FFE5B4" fill="#FFE5B4" />
+              <Star size={10} color="#FFD700" fill="#FFD700" style={styles.starBottom} />
+            </View>
+            
+            {/* Sleep Display */}
+            <View style={styles.headerSleepDisplay}>
+              <Text style={styles.headerTitle}>Kualitas Tidur Rata-Rata</Text>
+              <View style={styles.sleepDisplayRow}>
+                <Text style={styles.sleepNumberHeader}>{avgSleep}</Text>
+                <Text style={styles.sleepUnitHeader}>Jam</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Cloud Wave at bottom */}
+          <View style={styles.cloudWaveContainer}>
+            <TwoLayerCloudWave />
+          </View>
         </LinearGradient>
 
         {/* CONTENT AREA */}
         <View style={styles.contentArea}>
-          {/* Sleep Card */}
-          <View style={styles.sleepCard}>
-            <Text style={styles.cardTitle}>Kualitas Tidur Malam Ini</Text>
-            
-            <View style={styles.sleepDisplay}>
-              <Text style={styles.sleepNumber}>{avgSleep}</Text>
-              <Text style={styles.sleepUnit}>Jam</Text>
-            </View>
-
-            <Text style={styles.vmText}>Vm bisa dipake eeg</Text>
-
-            <TouchableOpacity style={styles.windDownBtn}>
-              <Text style={styles.windDownBtnText}>Mulai Wind-Down (21:00)</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Stats Card */}
+          {/* Stats Card (7 Hari) - UNCHANGED */}
           <View style={styles.statsCard}>
             <Text style={styles.cardTitle}>Statistik 7 Hari Terakhir</Text>
             
@@ -139,8 +240,7 @@ export default function HomeScreen() {
                 <Text style={[styles.statValue, {color: colors.success}]}>On Track</Text>
               </View>
             </View>
-
-            <View style={styles.chart}>
+           <View style={styles.chart}>
               {sleepData.map((day, index) => (
                 <View key={index} style={styles.bar}>
                   <View style={styles.barContainer}>
@@ -148,50 +248,37 @@ export default function HomeScreen() {
                       styles.barFill,
                       {
                         height: `${(day.hours / maxHours) * 100}%`,
-                        backgroundColor: day.hours >= 7 ? colors.success : colors.warning
+                        // Biru (colors.primary) untuk On Track (>=7h) dan Biru Muda (#A7C7E7) untuk Off Track
+                        backgroundColor: day.hours >= 7 ? colors.primary : '#A7C7E7' 
                       }
                     ]}>
-                      <Text style={styles.barText}>{day.hours}h</Text>
                     </View>
                   </View>
+                  {/* BARU: Teks Jam di atas barContainer */}
+                  <Text style={styles.barTextNew}>{day.hours}h</Text>
                   <Text style={styles.barLabel}>{day.day}</Text>
                 </View>
               ))}
             </View>
           </View>
 
-          {/* Stats Mania */}
-          <View style={styles.statsCard}>
-            <Text style={styles.cardTitle}>Statistik Mania</Text>
-            <View style={styles.statBoxes}>
-              <View style={styles.statBox}>
-                <Text style={styles.boxValue}>82%</Text>
-                <Text style={styles.boxLabel}>Sleep Rate</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.boxValue}>7h 2m</Text>
-                <Text style={styles.boxLabel}>Sleep Time</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.boxValue}>1h</Text>
-                <Text style={styles.boxLabel}>Deep Sleep</Text>
-              </View>
+
+          {/* Main Features (NEW) - Menggantikan Activities & Menu Products */}
+        <View style={styles.mainFeaturesGrid}>
+          <View style={styles.mainFeaturesRow}>
+            {/* Kartu Gratitude Notes (Kartu Besar di Kiri) */}
+            <MainFeatureCard {...mainFeatures[0]} isLarge={true} />
+            
+            {/* Kartu Musik Relaksasi & Jadwal Atur Tidur (Dua Kecil di Kanan) */}
+            <View style={styles.smallFeaturesCol}>
+              {mainFeatures.slice(1).map((feature, index) => (
+                <MainFeatureCard key={index} {...feature} />
+              ))}
             </View>
           </View>
+        </View>
 
-          {/* Activities */}
-          <View style={styles.activitiesRow}>
-            <View style={styles.activityCard}>
-              <Calendar size={30} color={colors.primary} />
-              <Text style={styles.activityText}>Akt Jadwal</Text>
-            </View>
-            <View style={styles.activityCard}>
-              <Music size={30} color={colors.primary} />
-              <Text style={styles.activityText}>Relaksasi musik o medte</Text>
-            </View>
-          </View>
-
-          {/* Tips */}
+          {/* Tips - UNCHANGED */}
           <View style={styles.tipCard}>
             <View style={styles.tipHeader}>
               <Sparkles size={18} color={colors.warning} />
@@ -200,25 +287,6 @@ export default function HomeScreen() {
             <Text style={styles.tipText}>
               Hindari layar gadget 30 menit sebelum tidur untuk kualitas tidur yang lebih baik
             </Text>
-          </View>
-
-          {/* Menu */}
-          <View style={styles.menuSection}>
-            <Text style={styles.menuTitle}>Menu Products</Text>
-            <View style={styles.menuRow}>
-              <View style={styles.menuItem}>
-                <BookOpen size={26} color={colors.primary} />
-                <Text style={styles.menuLabel}>Journal</Text>
-              </View>
-              <View style={styles.menuItem}>
-                <Music size={26} color={colors.primary} />
-                <Text style={styles.menuLabel}>Music</Text>
-              </View>
-              <View style={styles.menuItem}>
-                <Wind size={26} color={colors.primary} />
-                <Text style={styles.menuLabel}>Relax</Text>
-              </View>
-            </View>
           </View>
         </View>
       </ScrollView>
@@ -238,55 +306,90 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   
-  // HEADER with gradient
+  // HEADER with gradient (REVISED)
   headerGradient: {
-    height: 280,
+    height: 300, // Tambah tinggi untuk konten baru
     position: 'relative',
+    justifyContent: 'flex-end',
+    paddingBottom: 20, // Untuk jarak dari cloud
   },
-  skyContent: {
-    flex: 1,
+  
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    marginBottom: 40, // Jarak ke cloud wave
+  },
+  
+  // Moon & Stars (REVISED POSITION)
+  moonContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 30,
-  },
-  moonContainer: {
-    position:"absolute",
-    top:120,
-  },
-  starTop: {
-    position: 'absolute',
-    top: 130,
-    right:180,
+    position: 'relative',
+    // Tidak lagi absolute ke seluruh header, tapi ke headerContent
   },
   starRight: {
     position: 'absolute',
-    top: 130,
-    right:180,
+  bottom: 50,
+    right: 10,
   },
   starBottom: {
     position: 'absolute',
-    bottom: 80,
-    left: screenWidth * 0.35,
+    bottom: 50,
+    right: 10,
   },
   
-  // Cloud wave
+  // Sleep Display in Header (NEW STYLES)
+  headerSleepDisplay: {
+    alignItems: 'center',
+    marginBottom:10 
+  },
+  headerTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textLight,
+    marginBottom: 5,
+  },
+  sleepDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  sleepNumberHeader: {
+    fontSize: 70,
+    fontWeight: '900',
+    color: '#FFF',
+    lineHeight: 80,
+    marginRight: 5,
+  },
+  sleepUnitHeader: {
+    fontSize: 18,
+    color: colors.textLight,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  vmTextHeader: {
+    fontSize: 11,
+    color: '#D4E2F0', // Warna lebih terang untuk kontras
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  
   cloudWaveContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-  },
-  cloudWave: {
-    position: 'absolute',
-    bottom: 0,
+    overflow: 'visible',
   },
   
-  // Profile
+  // Profile (UNTOUCHED)
   profileBtn: {
     position: 'absolute',
-    top: 15,
+    top: 40, // Adjust top position for SafeAreaView/status bar
     right: 15,
     alignItems: 'center',
+    zIndex: 10, // Pastikan di atas gradient
   },
   profileCircle: {
     width: 36,
@@ -311,21 +414,29 @@ const styles = StyleSheet.create({
   // Content
   contentArea: {
     padding: 20,
-    marginTop: -40,
+    marginTop: -40, // Masih perlu untuk menumpuk di atas cloud wave
   },
   
-  // Cards
-  sleepCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
+  // Wind Down Button (NEW PLACEMENT & STYLE)
+  windDownBtnArea: {
+    backgroundColor: colors.primary,
+    padding: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 5,
   },
+  windDownBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Stats Card (UNTOUCHED)
   statsCard: {
     backgroundColor: '#FFF',
     borderRadius: 20,
@@ -345,42 +456,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Sleep display
-  sleepDisplay: {
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  sleepNumber: {
-    fontSize: 64,
-    fontWeight: '900',
-    color: colors.primary,
-    lineHeight: 70,
-  },
-  sleepUnit: {
-    fontSize: 16,
-    color: colors.secondaryText,
-    fontWeight: '600',
-  },
-  vmText: {
-    fontSize: 13,
-    color: colors.secondaryText,
-    textAlign: 'center',
-    marginBottom: 16,
-    fontStyle: 'italic',
-  },
-  windDownBtn: {
-    backgroundColor: colors.primary,
-    padding: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  windDownBtnText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  
-  // Stats
+  // Stats (UNTOUCHED)
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -403,22 +479,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   
-  // Chart
+  // Chart (REVISED - Bar Text placement)
   chart: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    height: 140,
-    gap: 5,
+    height: 160, // Tambah tinggi untuk teks di atas bar
+    gap: 10, // Tambah gap antar bar
   },
   bar: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 4, // Jarak label ke bar
   },
   barContainer: {
     width: '100%',
-    height: 110,
+    height: 120, // Tinggi bar lebih besar
     justifyContent: 'flex-end',
     backgroundColor: '#F5F5F5',
     borderRadius: 6,
@@ -426,13 +502,11 @@ const styles = StyleSheet.create({
   barFill: {
     width: '100%',
     borderRadius: 6,
-    justifyContent: 'center',
-    paddingTop: 4,
   },
-  barText: {
-    fontSize: 9,
+  barTextNew: { // Text di atas bar
+    fontSize: 10,
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.text,
     textAlign: 'center',
   },
   barLabel: {
@@ -441,7 +515,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Stat boxes
+  // Stat boxes (UNTOUCHED)
   statBoxes: {
     flexDirection: 'row',
     gap: 10,
@@ -465,33 +539,55 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Activities
-  activitiesRow: {
-    flexDirection: 'row',
-    gap: 10,
+  // Main Features (NEW SECTION)
+ mainFeaturesGrid: {
     marginBottom: 16,
+    paddingTop: 10,
   },
-  activityCard: {
-    flex: 1,
+mainFeaturesRow: {
+    flexDirection: 'row', // Atur dalam satu baris
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  mainFeatureCard: {
+    // Styling dasar untuk kartu kecil
+    width: '100%', // Di dalam smallFeaturesCol, ini akan menyesuaikan 100% dari kolom tersebut
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  activityText: {
-    fontSize: 11,
+  mainFeatureText: {
+    fontSize: 13,
     color: colors.text,
     textAlign: 'center',
     fontWeight: '600',
   },
+  largeFeatureCard: {
+    width: '49%', // Ambil setengah lebar
+    height: 185, // Tinggi yang sama dengan dua kartu kecil di kanan
+    paddingVertical: 30, // Padding yang lebih besar
+    justifyContent: 'center',
+  },
+  largeFeatureText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   
-  // Tips
+  // Container untuk dua kartu kecil di kanan
+  smallFeaturesCol: {
+    width: '49%', // Ambil setengah lebar
+    justifyContent: 'space-between',
+  },
+  // Tips (UNTOUCHED)
   tipCard: {
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -520,38 +616,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.secondaryText,
     lineHeight: 18,
-  },
-  
-  // Menu
-  menuSection: {
-    marginBottom: 16,
-  },
-  menuTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  menuItem: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  menuLabel: {
-    fontSize: 10,
-    color: colors.text,
-    fontWeight: '600',
   },
 });
