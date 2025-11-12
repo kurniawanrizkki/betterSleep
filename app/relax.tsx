@@ -1,7 +1,7 @@
+import { Heart, Moon, Music, Play, Waves, Wind } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Colors } from '../constants/Colors';
-import { Music, Wind, Waves, Moon, Play, Heart } from 'lucide-react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Colors } from '../constants/colors';
 
 const relaxationCategories = [
     { id: 1, name: 'Musik Instrumental', icon: Music },

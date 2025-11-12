@@ -36,7 +36,7 @@ const sleepData = [
 
 // Data untuk kartu fitur baru
 const mainFeatures = [
-  { icon: BookOpen, label: 'Gratitude Notes', color: '#5B9BD5' },
+  { icon: BookOpen, label: 'Gratitude Notes', color: 'white' },
   { icon: Music, label: 'Musik Relaksasi', color: '#5B9BD5' },
   // { icon: Feather, label: 'Meditasi', color: '#5B9BD5' },
   { icon: Calendar, label: 'Jadwal Atur Tidur', color: '#5B9BD5' },
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Main Features (NEW SECTION)
+// Main Features (NEW SECTION)
  mainFeaturesGrid: {
     marginBottom: 16,
     paddingTop: 10,
@@ -553,33 +553,60 @@ mainFeaturesRow: {
     // Styling dasar untuk kartu kecil
     width: '100%', // Di dalam smallFeaturesCol, ini akan menyesuaikan 100% dari kolom tersebut
     backgroundColor: '#FFF',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F0F8FF',
   },
   mainFeatureText: {
     fontSize: 13,
     color: colors.text,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   largeFeatureCard: {
     width: '49%', // Ambil setengah lebar
     height: 185, // Tinggi yang sama dengan dua kartu kecil di kanan
     paddingVertical: 30, // Padding yang lebih besar
     justifyContent: 'center',
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   largeFeatureText: {
     fontSize: 15,
     fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.5,
+  },
+  
+  // Icon Circle Styles
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconCircleLarge: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   
   // Container untuk dua kartu kecil di kanan

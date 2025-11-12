@@ -1,7 +1,7 @@
+import { BookOpen, Heart, Save, Sparkles } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
-import { Colors } from '../constants/Colors';
-import { Heart, BookOpen, Trophy, Sparkles, Save } from 'lucide-react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Colors } from '../constants/colors';
 
 const journalTypes = [
     { id: 1, name: 'Gratitude List', icon: Heart, color: '#FF6B6B' },
