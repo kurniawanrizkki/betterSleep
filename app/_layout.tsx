@@ -17,6 +17,40 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        
+        {/* Sleep Better App Screens */}
+        <Stack.Screen 
+          name="gratitude-notes" 
+          options={{ 
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right'
+          }} 
+        />
+        <Stack.Screen 
+          name="music-relaxation" 
+          options={{ 
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right'
+          }} 
+        />
+        <Stack.Screen 
+          name="sleep-schedule" 
+          options={{ 
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right'
+          }} 
+        />
+        <Stack.Screen 
+          name="statistics-detail" 
+          options={{ 
+            headerShown: false,
+            presentation: 'card',
+            animation: 'slide_from_right'
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

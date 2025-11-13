@@ -1,6 +1,6 @@
 // hooks/useTheme.ts
 import { useColorScheme } from 'react-native';
-import { Colors } from '../constants/colors';
+import { Colors } from '../constants/Colors';
 
 /**
  * Hook untuk mendapatkan skema warna saat ini (light atau dark).

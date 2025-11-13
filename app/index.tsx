@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { Mail, Lock, Eye, EyeOff, Moon, Star } from 'lucide-react-native';
+import { Eye, EyeOff, Lock, Mail, Moon, Star } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../hooks/useThemes';
 
 const simulateLogin = (email, password) => {
