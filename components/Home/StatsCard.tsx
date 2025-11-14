@@ -17,14 +17,11 @@ const colors = {
 const StatsCard = ({ sleepData, onPress }) => {
   // Hitung rata-rata tidur
   const avgSleep = (sleepData.reduce((sum, day) => sum + day.hours, 0) / sleepData.length).toFixed(1);
-  
   // Hitung max hours untuk scaling bar chart
   const maxHours = Math.max(...sleepData.map(d => d.hours));
-  
   // Hitung target dan progress (contoh: target 8 jam)
   const target = 8;
   const progress = Math.round((avgSleep / target) * 100);
-  
   // Tentukan status berdasarkan rata-rata tidur
   const getStatus = () => {
     if (avgSleep >= 7.5) return { text: 'On Track', color: colors.success };
