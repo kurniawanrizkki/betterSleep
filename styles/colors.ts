@@ -7,4 +7,4 @@ export const colors = {
   success: '#4CAF50',
   warning: '#FFA726',
   lightBg: '#E8F4F8',
-};
+};``

@@ -1,58 +1,71 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { ThemeProvider as NavThemeProvider } from '@react-navigation/native';
+import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
+// IMPORT THEME
+import {
+  NavigationDarkTheme as AppNavigationDarkTheme,
+  NavigationLightTheme as AppNavigationLightTheme,
+} from '../constants/theme';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+function RootLayoutNav() {
+  const { user, loading: authLoading } = useAuth();
+  // GUNAKAN HOOK THEME BARU
+  const { theme, colors } = useTheme(); 
+  const segments = useSegments();
+  const router = useRouter();
+  
+  // Pilih tema navigasi berdasarkan tema aktif
+  const navTheme = theme.dark ? AppNavigationDarkTheme : AppNavigationLightTheme;
+
+  useEffect(() => {
+    if (authLoading) return;
+    
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!user && !inAuthGroup) {
+      console.log('→ Redirecting to login');
+      router.replace('/(auth)');
+    } else if (user && inAuthGroup) {
+      console.log('→ Redirecting to home');
+      router.replace('/(tabs)');
+    }
+  }, [user, segments, authLoading]);
+
+  // Tampilkan loading indicator dengan warna tema
+  if (authLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        
-        {/* Sleep Better App Screens */}
-        <Stack.Screen 
-          name="gratitude-notes" 
-          options={{ 
-            headerShown: false,
-            presentation: 'card',
-            animation: 'slide_from_right'
-          }} 
-        />
-        <Stack.Screen 
-          name="music-relaxation" 
-          options={{ 
-            headerShown: false,
-            presentation: 'card',
-            animation: 'slide_from_right'
-          }} 
-        />
-        <Stack.Screen 
-          name="sleep-schedule" 
-          options={{ 
-            headerShown: false,
-            presentation: 'card',
-            animation: 'slide_from_right'
-          }} 
-        />
-        <Stack.Screen 
-          name="statistics-detail" 
-          options={{ 
-            headerShown: false,
-            presentation: 'card',
-            animation: 'slide_from_right'
-          }} 
-        />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    // Terapkan tema ke NavThemeProvider
+    <NavThemeProvider value={navTheme}>
+      {/* Atur gaya Status Bar */}
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
+      <Slot />
+    </NavThemeProvider>
+  );
+}
+
+// Tambahkan ThemeProvider di lapisan terluar
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <ThemeProvider>
+        <RootLayoutNav />
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
