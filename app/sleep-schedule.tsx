@@ -1,16 +1,23 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Bell, ChevronLeft, Moon, Sun } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
+import { sleepScheduleService } from '../services/sleepSchedule';
+import { Database } from '../types/database.types';
+
+type SleepSchedule = Database['public']['Tables']['sleep_schedules']['Row'];
 
 const colors = {
   primary: '#5B9BD5',
@@ -21,12 +28,48 @@ const colors = {
   warning: '#FFA726',
 };
 
-export default function SleepScheduleScreen({ navigation }) {
+export default function SleepScheduleScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
   const [bedtime, setBedtime] = useState('22:00');
   const [wakeTime, setWakeTime] = useState('06:00');
   const [reminderEnabled, setReminderEnabled] = useState(true);
-  const [reminderType, setReminderType] = useState('notification'); // 'notification' or 'fullscreen'
-  const [reminderBefore, setReminderBefore] = useState(30); // minutes before bedtime
+  const [reminderType, setReminderType] = useState<'notification' | 'fullscreen'>('notification');
+  const [reminderBefore, setReminderBefore] = useState(30);
+
+  useEffect(() => {
+    if (user) {
+      loadSchedule();
+    }
+  }, [user]);
+
+  const loadSchedule = async () => {
+    try {
+      setLoading(true);
+      const data = await sleepScheduleService.getActive(user!.id);
+      
+      if (data) {
+        setSchedule(data);
+        setBedtime(data.bedtime);
+        setWakeTime(data.wake_time);
+        setReminderEnabled(data.reminder_enabled);
+        setReminderType(data.reminder_type);
+        setReminderBefore(data.reminder_before);
+      }
+    } catch (error: any) {
+      console.error('Error loading schedule:', error);
+      // Don't show error for no schedule found
+      if (!error.message?.includes('no rows')) {
+        Alert.alert('Error', 'Gagal memuat jadwal tidur');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculateSleepDuration = () => {
     const [bedHour, bedMin] = bedtime.split(':').map(Number);
@@ -62,15 +105,79 @@ export default function SleepScheduleScreen({ navigation }) {
     }
   }
 
-  const handleSaveSchedule = () => {
-    Alert.alert(
-      'Jadwal Tersimpan',
-      `Jadwal tidur Anda:\n\nTidur: ${bedtime}\nBangun: ${wakeTime}\nDurasi: ${calculateSleepDuration()}\n\n${reminderEnabled ? 'Pengingat diaktifkan' : 'Pengingat dinonaktifkan'}`,
-      [{ text: 'OK' }]
-    );
+  const handleSaveSchedule = async () => {
+    if (!user) {
+      Alert.alert('Error', 'User tidak ditemukan');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const scheduleData = {
+        user_id: user.id,
+        bedtime,
+        wake_time: wakeTime,
+        reminder_enabled: reminderEnabled,
+        reminder_type: reminderType,
+        reminder_before: reminderBefore,
+        active: true,
+      };
+
+      if (schedule) {
+        // Update existing schedule
+        await sleepScheduleService.update(schedule.id, scheduleData);
+      } else {
+        // Create new schedule
+        await sleepScheduleService.upsert(scheduleData);
+      }
+
+      // Reload schedule
+      await loadSchedule();
+
+      Alert.alert(
+        'Jadwal Tersimpan! ✨',
+        `Jadwal tidur Anda:\n\nTidur: ${bedtime}\nBangun: ${wakeTime}\nDurasi: ${calculateSleepDuration()}\n\n${reminderEnabled ? 'Pengingat diaktifkan' : 'Pengingat dinonaktifkan'}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Error saving schedule:', error);
+      Alert.alert('Error', 'Gagal menyimpan jadwal tidur');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const quality = getSleepQuality();
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient
+          colors={['#6B9DC3', '#8FB3D5']}
+          style={styles.header}
+        >
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <ChevronLeft size={24} color={colors.textLight} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Jadwal Tidur</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <Text style={styles.headerSubtitle}>
+            Atur waktu tidur dan bangun yang konsisten 🌙
+          </Text>
+        </LinearGradient>
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Memuat jadwal...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -81,7 +188,7 @@ export default function SleepScheduleScreen({ navigation }) {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
           >
             <ChevronLeft size={24} color={colors.textLight} />
           </TouchableOpacity>
@@ -276,10 +383,15 @@ export default function SleepScheduleScreen({ navigation }) {
 
         {/* Save Button */}
         <TouchableOpacity 
-          style={styles.saveButton}
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSaveSchedule}
+          disabled={saving}
         >
-          <Text style={styles.saveButtonText}>Simpan Jadwal</Text>
+          {saving ? (
+            <ActivityIndicator color={colors.textLight} size="small" />
+          ) : (
+            <Text style={styles.saveButtonText}>Simpan Jadwal</Text>
+          )}
         </TouchableOpacity>
 
         {/* Tips */}
@@ -334,6 +446,17 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'center',
     opacity: 0.9,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.secondaryText,
+    fontWeight: '500',
   },
   content: {
     flex: 1,
@@ -561,6 +684,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     fontSize: 16,

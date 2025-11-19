@@ -1,17 +1,25 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { ChevronLeft, TrendingDown, TrendingUp } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
+import { sleepRecordsService } from '../services/sleepRecords';
+import { Database } from '../types/database.types';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+type SleepRecord = Database['public']['Tables']['sleep_records']['Row'];
 
 const colors = {
   primary: '#5B9BD5',
@@ -24,63 +32,118 @@ const colors = {
   lightBg: '#E8F4F8',
 };
 
-// Extended data untuk 30 hari terakhir
-const generateMonthlyData = () => {
-  const data = [];
-  const today = new Date();
-  
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    
-    // Generate random sleep hours dengan variasi realistis
-    const hours = 6 + Math.random() * 2.5;
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      day: date.getDate(),
-      hours: parseFloat(hours.toFixed(1)),
-      quality: hours >= 7.5 ? 'good' : hours >= 6.5 ? 'average' : 'poor',
-    });
-  }
-  
-  return data;
-};
+export default function StatisticsDetailScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [period, setPeriod] = useState<'week' | 'month'>('week');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sleepRecords, setSleepRecords] = useState<SleepRecord[]>([]);
 
-export default function StatisticsDetailScreen({ navigation }) {
-  const [period, setPeriod] = useState('week'); // 'week' or 'month'
-  const monthlyData = generateMonthlyData();
-  
-  const weeklyData = [
-    { day: 'Sen', hours: 7.2, date: '2024-11-11' },
-    { day: 'Sel', hours: 6.8, date: '2024-11-12' },
-    { day: 'Rab', hours: 8.1, date: '2024-11-13' },
-    { day: 'Kam', hours: 7.5, date: '2024-11-14' },
-    { day: 'Jum', hours: 6.5, date: '2024-11-15' },
-    { day: 'Sab', hours: 8.3, date: '2024-11-16' },
-    { day: 'Min', hours: 7.8, date: '2024-11-17' },
-  ];
+  useEffect(() => {
+    if (user) {
+      loadSleepRecords();
+    }
+  }, [user, period]);
 
-  const currentData = period === 'week' ? weeklyData : monthlyData;
+  const loadSleepRecords = async () => {
+    try {
+      setLoading(true);
+      const days = period === 'week' ? 7 : 30;
+      const stats = await sleepRecordsService.getStatistics(user!.id, days);
+      setSleepRecords(stats.records);
+    } catch (error: any) {
+      console.error('Error loading sleep records:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Statistik calculations
-  const avgSleep = (currentData.reduce((sum, d) => sum + d.hours, 0) / currentData.length).toFixed(1);
-  const maxSleep = Math.max(...currentData.map(d => d.hours)).toFixed(1);
-  const minSleep = Math.min(...currentData.map(d => d.hours)).toFixed(1);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadSleepRecords();
+    setRefreshing(false);
+  };
+
+  // Process data for display
+  const processedData = sleepRecords.map(record => {
+    const date = new Date(record.date + 'T00:00:00');
+    return {
+      date: record.date,
+      day: period === 'week' 
+        ? ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][date.getDay()]
+        : date.getDate(),
+      hours: record.hours,
+      quality: record.quality,
+    };
+  }).reverse(); // Reverse to show chronological order
+
+  // Statistics calculations
+  const avgSleep = sleepRecords.length > 0
+    ? (sleepRecords.reduce((sum, d) => sum + d.hours, 0) / sleepRecords.length).toFixed(1)
+    : '0.0';
   
-  const goodDays = currentData.filter(d => d.hours >= 7.5).length;
-  const avgDays = currentData.filter(d => d.hours >= 6.5 && d.hours < 7.5).length;
-  const poorDays = currentData.filter(d => d.hours < 6.5).length;
+  const maxSleep = sleepRecords.length > 0
+    ? Math.max(...sleepRecords.map(d => d.hours)).toFixed(1)
+    : '0.0';
   
-  const consistency = ((goodDays / currentData.length) * 100).toFixed(0);
+  const minSleep = sleepRecords.length > 0
+    ? Math.min(...sleepRecords.map(d => d.hours)).toFixed(1)
+    : '0.0';
+  
+  const goodDays = sleepRecords.filter(d => d.hours >= 7.5).length;
+  const avgDays = sleepRecords.filter(d => d.hours >= 6.5 && d.hours < 7.5).length;
+  const poorDays = sleepRecords.filter(d => d.hours < 6.5).length;
+  
+  const consistency = sleepRecords.length > 0
+    ? ((goodDays / sleepRecords.length) * 100).toFixed(0)
+    : '0';
   
   // Trend calculation
-  const firstHalf = currentData.slice(0, Math.floor(currentData.length / 2));
-  const secondHalf = currentData.slice(Math.floor(currentData.length / 2));
-  const firstAvg = firstHalf.reduce((sum, d) => sum + d.hours, 0) / firstHalf.length;
-  const secondAvg = secondHalf.reduce((sum, d) => sum + d.hours, 0) / secondHalf.length;
+  const halfPoint = Math.floor(sleepRecords.length / 2);
+  const firstHalf = sleepRecords.slice(0, halfPoint);
+  const secondHalf = sleepRecords.slice(halfPoint);
+  
+  const firstAvg = firstHalf.length > 0
+    ? firstHalf.reduce((sum, d) => sum + d.hours, 0) / firstHalf.length
+    : 0;
+  
+  const secondAvg = secondHalf.length > 0
+    ? secondHalf.reduce((sum, d) => sum + d.hours, 0) / secondHalf.length
+    : 0;
+  
   const trend = secondAvg > firstAvg ? 'up' : 'down';
   const trendValue = Math.abs(secondAvg - firstAvg).toFixed(1);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient
+          colors={['#6B9DC3', '#8FB3D5']}
+          style={styles.header}
+        >
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <ChevronLeft size={24} color={colors.textLight} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Statistik Tidur</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <Text style={styles.headerSubtitle}>
+            Analisis pola tidur Anda 📊
+          </Text>
+        </LinearGradient>
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Memuat data statistik...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -91,7 +154,7 @@ export default function StatisticsDetailScreen({ navigation }) {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
           >
             <ChevronLeft size={24} color={colors.textLight} />
           </TouchableOpacity>
@@ -106,6 +169,14 @@ export default function StatisticsDetailScreen({ navigation }) {
       <ScrollView 
         style={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* Period Selector */}
         <View style={styles.periodSelector}>
@@ -127,137 +198,147 @@ export default function StatisticsDetailScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Overview Cards */}
-        <View style={styles.overviewGrid}>
-          <View style={styles.overviewCard}>
-            <Text style={styles.overviewLabel}>Rata-rata</Text>
-            <Text style={styles.overviewValue}>{avgSleep}h</Text>
-            <Text style={styles.overviewSubtext}>per malam</Text>
-          </View>
-          <View style={styles.overviewCard}>
-            <Text style={styles.overviewLabel}>Konsistensi</Text>
-            <Text style={[styles.overviewValue, { color: consistency >= 70 ? colors.success : colors.warning }]}>
-              {consistency}%
+        {sleepRecords.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateEmoji}>📊</Text>
+            <Text style={styles.emptyStateTitle}>Belum Ada Data</Text>
+            <Text style={styles.emptyStateText}>
+              Mulai catat tidur Anda untuk melihat statistik lengkap
             </Text>
-            <Text style={styles.overviewSubtext}>hari baik</Text>
           </View>
-        </View>
+        ) : (
+          <>
+            {/* Overview Cards */}
+            <View style={styles.overviewGrid}>
+              <View style={styles.overviewCard}>
+                <Text style={styles.overviewLabel}>Rata-rata</Text>
+                <Text style={styles.overviewValue}>{avgSleep}h</Text>
+                <Text style={styles.overviewSubtext}>per malam</Text>
+              </View>
+              <View style={styles.overviewCard}>
+                <Text style={styles.overviewLabel}>Konsistensi</Text>
+                <Text style={[styles.overviewValue, { color: parseInt(consistency) >= 70 ? colors.success : colors.warning }]}>
+                  {consistency}%
+                </Text>
+                <Text style={styles.overviewSubtext}>hari baik</Text>
+              </View>
+            </View>
 
-        {/* Trend Card */}
-        <View style={styles.trendCard}>
-          <View style={styles.trendHeader}>
-            <Text style={styles.trendTitle}>Tren Tidur</Text>
-            <View style={[styles.trendBadge, { backgroundColor: trend === 'up' ? '#E8F5E9' : '#FFEBEE' }]}>
-              {trend === 'up' ? (
-                <TrendingUp size={16} color={colors.success} />
-              ) : (
-                <TrendingDown size={16} color={colors.danger} />
-              )}
-              <Text style={[styles.trendBadgeText, { color: trend === 'up' ? colors.success : colors.danger }]}>
-                {trend === 'up' ? '+' : '-'}{trendValue}h
+            {/* Trend Card */}
+            <View style={styles.trendCard}>
+              <View style={styles.trendHeader}>
+                <Text style={styles.trendTitle}>Tren Tidur</Text>
+                <View style={[styles.trendBadge, { backgroundColor: trend === 'up' ? '#E8F5E9' : '#FFEBEE' }]}>
+                  {trend === 'up' ? (
+                    <TrendingUp size={16} color={colors.success} />
+                  ) : (
+                    <TrendingDown size={16} color={colors.danger} />
+                  )}
+                  <Text style={[styles.trendBadgeText, { color: trend === 'up' ? colors.success : colors.danger }]}>
+                    {trend === 'up' ? '+' : '-'}{trendValue}h
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.trendDescription}>
+                {trend === 'up' 
+                  ? `Bagus! Durasi tidur meningkat ${trendValue} jam dibanding periode sebelumnya.`
+                  : `Perhatian! Durasi tidur menurun ${trendValue} jam dibanding periode sebelumnya.`
+                }
               </Text>
             </View>
-          </View>
-          <Text style={styles.trendDescription}>
-            {trend === 'up' 
-              ? `Bagus! Durasi tidur meningkat ${trendValue} jam dibanding periode sebelumnya.`
-              : `Perhatian! Durasi tidur menurun ${trendValue} jam dibanding periode sebelumnya.`
-            }
-          </Text>
-        </View>
 
-        {/* Chart */}
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Grafik Tidur</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chartScrollContent}
-          >
-            <View style={styles.chart}>
-              {currentData.map((item, index) => {
-                const maxHours = Math.max(...currentData.map(d => d.hours));
-                const height = (item.hours / maxHours) * 150;
-                const barColor = item.hours >= 7.5 ? colors.primary : item.hours >= 6.5 ? '#A7C7E7' : '#E0E0E0';
-                
-                return (
-                  <View key={index} style={styles.barWrapper}>
-                    <Text style={styles.barHours}>{item.hours}h</Text>
-                    <View style={styles.barContainer}>
-                      <View style={[styles.barFill, { height, backgroundColor: barColor }]} />
-                    </View>
-                    <Text style={styles.barLabel}>
-                      {period === 'week' ? item.day : item.day}
-                    </Text>
-                  </View>
-                );
-              })}
+            {/* Chart */}
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>Grafik Tidur</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chartScrollContent}
+              >
+                <View style={styles.chart}>
+                  {processedData.map((item, index) => {
+                    const maxHours = Math.max(...processedData.map(d => d.hours), 8);
+                    const height = (item.hours / maxHours) * 150;
+                    const barColor = item.hours >= 7.5 ? colors.primary : item.hours >= 6.5 ? '#A7C7E7' : '#E0E0E0';
+                    
+                    return (
+                      <View key={index} style={styles.barWrapper}>
+                        <Text style={styles.barHours}>{item.hours}h</Text>
+                        <View style={styles.barContainer}>
+                          <View style={[styles.barFill, { height, backgroundColor: barColor }]} />
+                        </View>
+                        <Text style={styles.barLabel}>{item.day}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
-          </ScrollView>
-        </View>
 
-        {/* Quality Distribution */}
-        <View style={styles.qualityCard}>
-          <Text style={styles.qualityTitle}>Distribusi Kualitas Tidur</Text>
-          <View style={styles.qualityBar}>
-            <View style={[styles.qualitySegment, { flex: goodDays, backgroundColor: colors.success }]} />
-            <View style={[styles.qualitySegment, { flex: avgDays, backgroundColor: colors.warning }]} />
-            <View style={[styles.qualitySegment, { flex: poorDays, backgroundColor: colors.danger }]} />
-          </View>
-          <View style={styles.qualityLegend}>
-            <View style={styles.qualityLegendItem}>
-              <View style={[styles.qualityDot, { backgroundColor: colors.success }]} />
-              <Text style={styles.qualityLegendText}>Baik ({goodDays} hari)</Text>
+            {/* Quality Distribution */}
+            <View style={styles.qualityCard}>
+              <Text style={styles.qualityTitle}>Distribusi Kualitas Tidur</Text>
+              <View style={styles.qualityBar}>
+                <View style={[styles.qualitySegment, { flex: goodDays, backgroundColor: colors.success }]} />
+                <View style={[styles.qualitySegment, { flex: avgDays, backgroundColor: colors.warning }]} />
+                <View style={[styles.qualitySegment, { flex: poorDays, backgroundColor: colors.danger }]} />
+              </View>
+              <View style={styles.qualityLegend}>
+                <View style={styles.qualityLegendItem}>
+                  <View style={[styles.qualityDot, { backgroundColor: colors.success }]} />
+                  <Text style={styles.qualityLegendText}>Baik ({goodDays} hari)</Text>
+                </View>
+                <View style={styles.qualityLegendItem}>
+                  <View style={[styles.qualityDot, { backgroundColor: colors.warning }]} />
+                  <Text style={styles.qualityLegendText}>Cukup ({avgDays} hari)</Text>
+                </View>
+                <View style={styles.qualityLegendItem}>
+                  <View style={[styles.qualityDot, { backgroundColor: colors.danger }]} />
+                  <Text style={styles.qualityLegendText}>Kurang ({poorDays} hari)</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.qualityLegendItem}>
-              <View style={[styles.qualityDot, { backgroundColor: colors.warning }]} />
-              <Text style={styles.qualityLegendText}>Cukup ({avgDays} hari)</Text>
-            </View>
-            <View style={styles.qualityLegendItem}>
-              <View style={[styles.qualityDot, { backgroundColor: colors.danger }]} />
-              <Text style={styles.qualityLegendText}>Kurang ({poorDays} hari)</Text>
-            </View>
-          </View>
-        </View>
 
-        {/* Detailed Stats */}
-        <View style={styles.detailStatsCard}>
-          <Text style={styles.detailStatsTitle}>Detail Statistik</Text>
-          <View style={styles.detailStatRow}>
-            <Text style={styles.detailStatLabel}>Tidur Terlama</Text>
-            <Text style={styles.detailStatValue}>{maxSleep} jam</Text>
-          </View>
-          <View style={styles.detailStatRow}>
-            <Text style={styles.detailStatLabel}>Tidur Tersingkat</Text>
-            <Text style={styles.detailStatValue}>{minSleep} jam</Text>
-          </View>
-          <View style={styles.detailStatRow}>
-            <Text style={styles.detailStatLabel}>Target Harian</Text>
-            <Text style={styles.detailStatValue}>8 jam</Text>
-          </View>
-          <View style={styles.detailStatRow}>
-            <Text style={styles.detailStatLabel}>Hari Mencapai Target</Text>
-            <Text style={styles.detailStatValue}>{currentData.filter(d => d.hours >= 8).length} hari</Text>
-          </View>
-        </View>
+            {/* Detailed Stats */}
+            <View style={styles.detailStatsCard}>
+              <Text style={styles.detailStatsTitle}>Detail Statistik</Text>
+              <View style={styles.detailStatRow}>
+                <Text style={styles.detailStatLabel}>Tidur Terlama</Text>
+                <Text style={styles.detailStatValue}>{maxSleep} jam</Text>
+              </View>
+              <View style={styles.detailStatRow}>
+                <Text style={styles.detailStatLabel}>Tidur Tersingkat</Text>
+                <Text style={styles.detailStatValue}>{minSleep} jam</Text>
+              </View>
+              <View style={styles.detailStatRow}>
+                <Text style={styles.detailStatLabel}>Target Harian</Text>
+                <Text style={styles.detailStatValue}>8 jam</Text>
+              </View>
+              <View style={styles.detailStatRow}>
+                <Text style={styles.detailStatLabel}>Hari Mencapai Target</Text>
+                <Text style={styles.detailStatValue}>{sleepRecords.filter(d => d.hours >= 8).length} hari</Text>
+              </View>
+            </View>
 
-        {/* Recommendations */}
-        <View style={styles.recommendationCard}>
-          <Text style={styles.recommendationTitle}>💡 Rekomendasi</Text>
-          {avgSleep < 7 ? (
-            <Text style={styles.recommendationText}>
-              • Coba tidur 30 menit lebih awal{'\n'}
-              • Kurangi aktivitas stimulan sebelum tidur{'\n'}
-              • Atur jadwal tidur yang konsisten
-            </Text>
-          ) : (
-            <Text style={styles.recommendationText}>
-              • Pertahankan pola tidur yang baik!{'\n'}
-              • Tetap konsisten dengan jadwal tidur{'\n'}
-              • Jaga rutinitas sebelum tidur
-            </Text>
-          )}
-        </View>
+            {/* Recommendations */}
+            <View style={styles.recommendationCard}>
+              <Text style={styles.recommendationTitle}>💡 Rekomendasi</Text>
+              {parseFloat(avgSleep) < 7 ? (
+                <Text style={styles.recommendationText}>
+                  • Coba tidur 30 menit lebih awal{'\n'}
+                  • Kurangi aktivitas stimulan sebelum tidur{'\n'}
+                  • Atur jadwal tidur yang konsisten
+                </Text>
+              ) : (
+                <Text style={styles.recommendationText}>
+                  • Pertahankan pola tidur yang baik!{'\n'}
+                  • Tetap konsisten dengan jadwal tidur{'\n'}
+                  • Jaga rutinitas sebelum tidur
+                </Text>
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -301,6 +382,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.9,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingTop: 100,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.secondaryText,
+    fontWeight: '500',
+  },
   content: {
     flex: 1,
     padding: 20,
@@ -333,6 +426,28 @@ const styles = StyleSheet.create({
   },
   periodButtonTextActive: {
     color: colors.textLight,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyStateEmoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   overviewGrid: {
     flexDirection: 'row',

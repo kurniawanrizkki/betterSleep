@@ -5,8 +5,10 @@ import {
   Music,
   Sparkles,
 } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -16,16 +18,8 @@ import {
 } from 'react-native';
 import Header from '../../components/Home/Header';
 import StatsCard from '../../components/Home/StatsCard';
-
-const sleepData = [
-  { day: 'Mon', hours: 7.2 },
-  { day: 'Tue', hours: 6.8 },
-  { day: 'Wed', hours: 8.1 },
-  { day: 'Thu', hours: 7.5 },
-  { day: 'Fri', hours: 6.5 },
-  { day: 'Sat', hours: 8.3 },
-  { day: 'Sun', hours: 7.8 },
-];
+import { useAuth } from '../../contexts/AuthContext';
+import { sleepRecordsService } from '../../services/sleepRecords';
 
 const colors = {
   card: '#FFFFFF',
@@ -60,6 +54,18 @@ const mainFeatures = [
   },
 ];
 
+// Random tips array
+const sleepTips = [
+  'Hindari layar gadget 30 menit sebelum tidur untuk kualitas tidur yang lebih baik',
+  'Jaga suhu kamar sejuk (18-20°C) untuk tidur yang optimal',
+  'Buat rutinitas tidur yang konsisten setiap hari',
+  'Hindari kafein dan makanan berat 4-6 jam sebelum tidur',
+  'Olahraga teratur membantu tidur lebih nyenyak, tapi hindari 3 jam sebelum tidur',
+  'Gunakan tempat tidur hanya untuk tidur, bukan bekerja atau menonton',
+  'Coba teknik relaksasi seperti meditasi atau pernapasan dalam',
+  'Pastikan kamar tidur gelap, tenang, dan nyaman',
+];
+
 // Komponen untuk kartu fitur utama
 const MainFeatureCard = ({ icon: Icon, label, color, isLarge = false, onPress }) => (
   <TouchableOpacity 
@@ -74,12 +80,73 @@ const MainFeatureCard = ({ icon: Icon, label, color, isLarge = false, onPress })
 
 export default function HomeScreen() {
   const router = useRouter();
-  const avgSleep = (sleepData.reduce((sum, day) => sum + day.hours, 0) / sleepData.length).toFixed(1);
+  const { user } = useAuth();
+  
+  // State untuk data dari Supabase
+  const [sleepData, setSleepData] = useState([]);
+  const [avgSleep, setAvgSleep] = useState('0.0');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dailyTip, setDailyTip] = useState('');
+
+  // Load data saat komponen mount
+  useEffect(() => {
+    if (user) {
+      loadWeeklyData();
+    }
+    // Set random tip
+    setDailyTip(sleepTips[Math.floor(Math.random() * sleepTips.length)]);
+  }, [user]);
+
+  const loadWeeklyData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load weekly summary dari Supabase
+      const summary = await sleepRecordsService.getWeeklySummary(user!.id);
+      
+      // Format data untuk StatsCard
+      const formattedData = summary.weekData.map(day => ({
+        day: day.day,
+        hours: day.hours,
+      }));
+      
+      setSleepData(formattedData);
+      setAvgSleep(summary.average.toFixed(1));
+      
+      console.log('📊 Weekly data loaded:', {
+        records: formattedData.length,
+        average: summary.average,
+        streak: summary.streak,
+      });
+    } catch (error: any) {
+      console.error('Error loading weekly data:', error);
+      // Fallback ke data kosong jika error
+      setSleepData([
+        { day: 'Sen', hours: 0 },
+        { day: 'Sel', hours: 0 },
+        { day: 'Rab', hours: 0 },
+        { day: 'Kam', hours: 0 },
+        { day: 'Jum', hours: 0 },
+        { day: 'Sab', hours: 0 },
+        { day: 'Min', hours: 0 },
+      ]);
+      setAvgSleep('0.0');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadWeeklyData();
+    // Generate new random tip
+    setDailyTip(sleepTips[Math.floor(Math.random() * sleepTips.length)]);
+    setRefreshing(false);
+  };
 
   const handleProfilePress = () => {
-    // Handle profile button press
-    console.log('Profile pressed');
-    // router.push('/profile');
+    router.push('/(tabs)/profile');
   };
 
   const handleFeaturePress = (route) => {
@@ -92,12 +159,31 @@ export default function HomeScreen() {
     router.push('/statistics-detail');
   };
 
+  if (loading && !user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Memuat data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* HEADER - Menggunakan komponen terpisah */}
         <Header avgSleep={avgSleep} onProfilePress={handleProfilePress} />
@@ -105,7 +191,14 @@ export default function HomeScreen() {
         {/* CONTENT AREA */}
         <View style={styles.contentArea}>
           {/* Stats Card - Menggunakan komponen terpisah dengan onPress */}
-          <StatsCard sleepData={sleepData} onPress={handleStatsPress} />
+          {loading ? (
+            <View style={styles.statsLoadingCard}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.statsLoadingText}>Memuat statistik mingguan...</Text>
+            </View>
+          ) : (
+            <StatsCard sleepData={sleepData} onPress={handleStatsPress} />
+          )}
 
           {/* Main Features */}
           <View style={styles.mainFeaturesGrid}>
@@ -136,10 +229,25 @@ export default function HomeScreen() {
               <Sparkles size={18} color={colors.warning} />
               <Text style={styles.tipTitle}>Tips hari ini!</Text>
             </View>
-            <Text style={styles.tipText}>
-              Hindari layar gadget 30 menit sebelum tidur untuk kualitas tidur yang lebih baik
-            </Text>
+            <Text style={styles.tipText}>{dailyTip}</Text>
           </View>
+
+          {/* Quick Add Sleep Record (Optional) */}
+          {sleepData.every(day => day.hours === 0) && !loading && (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateEmoji}>😴</Text>
+              <Text style={styles.emptyStateTitle}>Belum Ada Data Tidur</Text>
+              <Text style={styles.emptyStateText}>
+                Mulai catat tidur Anda untuk melihat statistik dan analisis
+              </Text>
+              <TouchableOpacity 
+                style={styles.addRecordButton}
+                onPress={() => router.push('/statistics-detail')}
+              >
+                <Text style={styles.addRecordButtonText}>Lihat Statistik</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -157,11 +265,44 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     paddingBottom: 80,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.secondaryText,
+    fontWeight: '500',
+  },
   
   // Content
   contentArea: {
     padding: 20,
     marginTop: -40,
+  },
+
+  // Stats Loading
+  statsLoadingCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  statsLoadingText: {
+    fontSize: 14,
+    color: colors.secondaryText,
+    fontWeight: '500',
   },
 
   // Main Features
@@ -252,5 +393,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.secondaryText,
     lineHeight: 18,
+  },
+
+  // Empty State
+  emptyStateCard: {
+    backgroundColor: colors.lightBg,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: colors.primary + '20',
+    borderStyle: 'dashed',
+  },
+  emptyStateEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  addRecordButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  addRecordButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textLight,
   },
 });

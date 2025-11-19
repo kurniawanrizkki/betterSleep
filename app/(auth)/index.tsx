@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Eye, EyeOff, Lock, Mail, Star } from 'lucide-react-native';
+import { Eye, EyeOff, Lock, Mail, Moon } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -66,9 +66,9 @@ const LoginScreen = () => {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
                 <View style={styles.header}>
-                    <Star size={48} color={colors.primary} />
-                    <Text style={styles.title}>Selamat Datang Kembali!</Text>
-                    <Text style={styles.subtitle}>Masuk untuk melanjutkan perjalanan kesehatan mental Anda.</Text>
+                     <Moon size={48} color={colors.primary} />
+                    <Text style={styles.title}>BetterSleep</Text>
+                    <Text style={styles.subtitle}>Masuk untuk melanjutkan perjalanan kesehatan jam tidur Anda.</Text>
                 </View>
 
                 <View style={styles.form}>
