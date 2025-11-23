@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, ChevronLeft, Moon, Sun } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { Bell, ChevronLeft, Moon, Sun, TestTube } from 'lucide-react-native';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,10 +12,13 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { sleepScheduleService } from '../services/sleepSchedule';
+import { notificationService } from '../services/notificationService';
 import { Database } from '../types/database.types';
+import * as Notifications from 'expo-notifications';
 
 type SleepSchedule = Database['public']['Tables']['sleep_schedules']['Row'];
 
@@ -40,12 +43,72 @@ export default function SleepScheduleScreen() {
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [reminderType, setReminderType] = useState<'notification' | 'fullscreen'>('notification');
   const [reminderBefore, setReminderBefore] = useState(30);
+  const [notificationStatus, setNotificationStatus] = useState<{
+    enabled: boolean;
+    scheduled: number;
+    message: string;
+  } | null>(null);
+
+  const notificationListener = useRef<any>();
+  const responseListener = useRef<any>();
 
   useEffect(() => {
     if (user) {
       loadSchedule();
+      setupNotificationListeners();
     }
+
+    return () => {
+      // Cleanup listeners
+      if (notificationListener.current) {
+        notificationListener.current.remove();
+      }
+      if (responseListener.current) {
+        responseListener.current.remove();
+      }
+    };
   }, [user]);
+
+  const setupNotificationListeners = () => {
+    // Handle notifications received while app is in foreground
+    notificationListener.current = notificationService.addNotificationReceivedListener(
+      (notification) => {
+        console.log('📬 Notification received (app in foreground)');
+        console.log('   Title:', notification.request.content.title);
+        console.log('   ID:', notification.request.identifier);
+        
+        // DON'T show anything in UI
+        // The system notification handler will decide what to show
+        // We just log it for debugging
+      }
+    );
+
+    // Handle user tapping on notification
+    responseListener.current = notificationService.addNotificationResponseListener(
+      (response) => {
+        console.log('👆 User tapped notification');
+        
+        const data = response.notification.request.content.data;
+        
+        // Dismiss the notification
+        Notifications.dismissNotificationAsync(response.notification.request.identifier);
+        
+        if (data.type === 'sleep_reminder') {
+          Alert.alert(
+            '🌙 Pengingat Tidur',
+            `Waktunya mempersiapkan diri untuk tidur pukul ${data.bedtime}!\n\nTidur yang cukup penting untuk kesehatan Anda.`,
+            [{ text: 'OK' }]
+          );
+        } else if (data.type === 'test') {
+          Alert.alert(
+            '✅ Test Berhasil!',
+            'Alarm berfungsi dengan baik! Notifikasi dapat muncul saat aplikasi tertutup.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    );
+  };
 
   const loadSchedule = async () => {
     try {
@@ -60,9 +123,12 @@ export default function SleepScheduleScreen() {
         setReminderType(data.reminder_type);
         setReminderBefore(data.reminder_before);
       }
+
+      // Check notification status
+      const status = await notificationService.checkNotificationStatus();
+      setNotificationStatus(status);
     } catch (error: any) {
       console.error('Error loading schedule:', error);
-      // Don't show error for no schedule found
       if (!error.message?.includes('no rows')) {
         Alert.alert('Error', 'Gagal memuat jadwal tidur');
       }
@@ -82,6 +148,57 @@ export default function SleepScheduleScreen() {
     const minutes = totalMinutes % 60;
     
     return `${hours} jam ${minutes} menit`;
+  };
+
+  const calculateAlarmTime = () => {
+    const [bedHour, bedMin] = bedtime.split(':').map(Number);
+    
+    let bedtimeMinutes = bedHour * 60 + bedMin;
+    let alarmMinutes = bedtimeMinutes - reminderBefore;
+    
+    if (alarmMinutes < 0) {
+      alarmMinutes += 24 * 60;
+    }
+    
+    const alarmHour = Math.floor(alarmMinutes / 60);
+    const alarmMin = alarmMinutes % 60;
+    
+    return `${alarmHour.toString().padStart(2, '0')}:${alarmMin.toString().padStart(2, '0')}`;
+  };
+
+  const getTimeUntilAlarm = () => {
+    const [bedHour, bedMin] = bedtime.split(':').map(Number);
+    
+    let bedtimeMinutes = bedHour * 60 + bedMin;
+    let alarmMinutes = bedtimeMinutes - reminderBefore;
+    
+    if (alarmMinutes < 0) {
+      alarmMinutes += 24 * 60;
+    }
+    
+    const alarmHour = Math.floor(alarmMinutes / 60);
+    const alarmMin = alarmMinutes % 60;
+    
+    const now = new Date();
+    const alarmTime = new Date();
+    alarmTime.setHours(alarmHour, alarmMin, 0, 0);
+    
+    if (alarmTime <= now) {
+      alarmTime.setDate(alarmTime.getDate() + 1);
+    }
+    
+    const minutesUntil = Math.floor((alarmTime.getTime() - now.getTime()) / 1000 / 60);
+    const hoursUntil = Math.floor(minutesUntil / 60);
+    const minsUntil = minutesUntil % 60;
+    
+    return {
+      time: alarmTime,
+      minutesUntil,
+      text: hoursUntil > 0 
+        ? `${hoursUntil} jam ${minsUntil} menit lagi`
+        : `${minsUntil} menit lagi`,
+      isPast: minutesUntil < 1,
+    };
   };
 
   const getSleepQuality = () => {
@@ -124,19 +241,23 @@ export default function SleepScheduleScreen() {
       };
 
       if (schedule) {
-        // Update existing schedule
         await sleepScheduleService.update(schedule.id, scheduleData);
       } else {
-        // Create new schedule
         await sleepScheduleService.upsert(scheduleData);
       }
 
-      // Reload schedule
       await loadSchedule();
 
+      // Show detailed confirmation
+      const status = await notificationService.checkNotificationStatus();
+      
       Alert.alert(
-        'Jadwal Tersimpan! ✨',
-        `Jadwal tidur Anda:\n\nTidur: ${bedtime}\nBangun: ${wakeTime}\nDurasi: ${calculateSleepDuration()}\n\n${reminderEnabled ? 'Pengingat diaktifkan' : 'Pengingat dinonaktifkan'}`,
+        '✅ Jadwal Berhasil Disimpan!',
+        `Waktu Tidur: ${bedtime}\nWaktu Bangun: ${wakeTime}\nDurasi: ${calculateSleepDuration()}\n\n${
+          reminderEnabled 
+            ? `🔔 Alarm Aktif:\n• ${status.scheduled} alarm terjadwal\n• Alarm pertama: ${status.nextAlarm || 'Menghitung...'}\n• Pengingat ${reminderBefore} menit sebelum tidur\n\n✅ Alarm sudah aktif! Anda bisa tutup aplikasi kapan saja.\n\n⚠️ PENTING:\n• Jangan force stop aplikasi\n• Matikan mode Hemat Baterai untuk app ini` 
+            : '❌ Pengingat dinonaktifkan'
+        }`,
         [{ text: 'OK' }]
       );
     } catch (error: any) {
@@ -145,6 +266,22 @@ export default function SleepScheduleScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleTestNotification = async () => {
+    await notificationService.sendTestNotification();
+    
+    Alert.alert(
+      '✅ Test Alarm Dijadwalkan!',
+      'Alarm test telah dijadwalkan dan akan berbunyi dalam 10 detik.\n\n' +
+      '📱 Anda bisa:\n' +
+      '• Tetap di app ini\n' +
+      '• Minimize ke home screen\n' +
+      '• Buka app lain\n' +
+      '• Tutup app sepenuhnya\n\n' +
+      'Notifikasi akan muncul dalam 10 detik di mana pun Anda berada!',
+      [{ text: 'OK' }]
+    );
   };
 
   const quality = getSleepQuality();
@@ -193,7 +330,20 @@ export default function SleepScheduleScreen() {
             <ChevronLeft size={24} color={colors.textLight} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Jadwal Tidur</Text>
-          <View style={styles.placeholder} />
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.testButton}
+              onPress={handleTestNotification}
+            >
+              <TestTube size={20} color={colors.textLight} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.testButton}
+              onPress={() => router.push('/debug-alarm' as any)}
+            >
+              <Text style={styles.debugText}>🔍</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.headerSubtitle}>
           Atur waktu tidur dan bangun yang konsisten 🌙
@@ -204,6 +354,63 @@ export default function SleepScheduleScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Notification Status Card */}
+        {notificationStatus && (
+          <View style={[
+            styles.statusCard,
+            { 
+              backgroundColor: notificationStatus.enabled 
+                ? (notificationStatus.scheduled > 0 ? '#E8F5E9' : '#FFF3E0')
+                : '#FFEBEE' 
+            }
+          ]}>
+            <Text style={styles.statusTitle}>
+              {notificationStatus.enabled 
+                ? (notificationStatus.scheduled > 0 ? '✅ Alarm Aktif' : '⚠️ Belum Ada Alarm')
+                : '❌ Izin Notifikasi Belum Diberikan'
+              }
+            </Text>
+            <Text style={styles.statusMessage}>
+              {notificationStatus.message}
+            </Text>
+            {notificationStatus.nextAlarm && (
+              <Text style={styles.statusNextAlarm}>
+                🔔 Alarm berikutnya: {notificationStatus.nextAlarm}
+              </Text>
+            )}
+            {!notificationStatus.enabled && (
+              <TouchableOpacity 
+                style={styles.statusButton}
+                onPress={() => Linking.openSettings()}
+              >
+                <Text style={styles.statusButtonText}>Buka Pengaturan</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Alarm Preview Card */}
+        {reminderEnabled && (
+          <View style={styles.alarmPreviewCard}>
+            <Text style={styles.alarmPreviewTitle}>⏰ Preview Alarm</Text>
+            <View style={styles.alarmPreviewContent}>
+              <Text style={styles.alarmPreviewLabel}>Alarm akan berbunyi:</Text>
+              <Text style={styles.alarmPreviewTime}>{calculateAlarmTime()}</Text>
+              <Text style={styles.alarmPreviewCountdown}>
+                {(() => {
+                  const info = getTimeUntilAlarm();
+                  return info.isPast 
+                    ? '⚠️ Waktu sudah lewat! Pilih waktu yang lebih lama.'
+                    : `📍 ${info.text}`;
+                })()}
+              </Text>
+              <Text style={styles.alarmPreviewDetail}>
+                ({reminderBefore} menit sebelum tidur pukul {bedtime})
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Sleep Duration Card */}
         <View style={styles.durationCard}>
           <Text style={styles.durationLabel}>Durasi Tidur</Text>
@@ -296,7 +503,7 @@ export default function SleepScheduleScreen() {
         <View style={styles.reminderCard}>
           <View style={styles.reminderHeader}>
             <Bell size={20} color={colors.primary} />
-            <Text style={styles.reminderTitle}>Pengingat Tidur</Text>
+            <Text style={styles.reminderTitle}>Pengingat Tidur (Alarm)</Text>
           </View>
           
           <View style={styles.reminderOption}>
@@ -370,12 +577,23 @@ export default function SleepScheduleScreen() {
                     )}
                   </View>
                   <View style={styles.reminderTypeInfo}>
-                    <Text style={styles.reminderTypeLabel}>Layar Penuh</Text>
+                    <Text style={styles.reminderTypeLabel}>Alarm Prioritas Tinggi</Text>
                     <Text style={styles.reminderTypeDesc}>
-                      Tampil 1 layar penuh dengan animasi
+                      Suara lebih keras, vibrate kuat (Recommended)
                     </Text>
                   </View>
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  ℹ️ Alarm akan berbunyi setiap hari pada waktu yang sama.{'\n\n'}
+                  📌 Pastikan:{'\n'}
+                  • Notifikasi BetterSleep diizinkan{'\n'}
+                  • Baterai tidak dalam mode hemat ekstrim{'\n'}
+                  • Aplikasi tidak di-force stop{'\n'}
+                  • Mode "Jangan Ganggu" dimatikan saat waktu alarm
+                </Text>
               </View>
             </>
           )}
@@ -390,18 +608,31 @@ export default function SleepScheduleScreen() {
           {saving ? (
             <ActivityIndicator color={colors.textLight} size="small" />
           ) : (
-            <Text style={styles.saveButtonText}>Simpan Jadwal</Text>
+            <Text style={styles.saveButtonText}>Simpan Jadwal & Aktifkan Alarm</Text>
           )}
         </TouchableOpacity>
 
         {/* Tips */}
         <View style={styles.tipsCard}>
-          <Text style={styles.tipsTitle}>💡 Tips Tidur Konsisten</Text>
+          <Text style={styles.tipsTitle}>💡 Cara Kerja Alarm</Text>
           <Text style={styles.tipsText}>
-            • Tidur dan bangun pada waktu yang sama setiap hari{'\n'}
-            • Hindari tidur siang terlalu lama{'\n'}
-            • Hindari kafein 6 jam sebelum tidur{'\n'}
-            • Ciptakan rutinitas sebelum tidur
+            <Text style={{fontWeight: 'bold'}}>✅ Alarm Otomatis Aktif</Text>{'\n'}
+            Setelah disimpan, alarm sudah langsung aktif! Anda bisa:{'\n'}
+            • Tutup aplikasi{'\n'}
+            • Minimize ke background{'\n'}
+            • Restart HP{'\n'}
+            • Buka aplikasi lain{'\n\n'}
+            
+            <Text style={{fontWeight: 'bold'}}>🔔 Kapan Alarm Berbunyi?</Text>{'\n'}
+            Alarm akan otomatis berbunyi sesuai waktu yang Anda set, bahkan kalau:{'\n'}
+            • Aplikasi tertutup{'\n'}
+            • HP dalam mode silent (tergantung pengaturan){'\n'}
+            • Anda sedang pakai aplikasi lain{'\n\n'}
+            
+            <Text style={{fontWeight: 'bold'}}>⚠️ Yang TIDAK Boleh:</Text>{'\n'}
+            • Force stop aplikasi dari pengaturan{'\n'}
+            • Hapus aplikasi dari RAM secara paksa{'\n'}
+            • Aktifkan Battery Saver yang agresif
           </Text>
         </View>
       </ScrollView>
@@ -432,6 +663,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  testButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  debugText: {
+    fontSize: 18,
   },
   headerTitle: {
     fontSize: 20,
@@ -673,6 +919,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.secondaryText,
   },
+  infoBox: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  infoText: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 18,
+  },
   saveButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,
@@ -711,5 +968,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     lineHeight: 22,
+  },
+  statusCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  statusMessage: {
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  statusNextAlarm: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  statusButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  statusButtonText: {
+    color: colors.textLight,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

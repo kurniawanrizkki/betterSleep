@@ -9,7 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "fetch"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +25,22 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.bettersleep.app",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "com.android.alarm.permission.SET_ALARM"
+      ],
+      "useNextNotificationsApi": true,
+      "allowBackup": false
     },
     "web": {
       "output": "static",
@@ -38,11 +59,36 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#5B9BD5",
+          "sounds": [
+            "./assets/sounds/alarm.mp3"
+          ],
+          "mode": "production",
+          "androidMode": "default",
+          "androidCollapsedTitle": "BetterSleep Reminder"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#5B9BD5",
+      "androidMode": "default",
+      "androidCollapsedTitle": "BetterSleep"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "86f1f3bf-b13a-42d4-ab24-0aaa344eaf77"
+      }
     }
   }
 }

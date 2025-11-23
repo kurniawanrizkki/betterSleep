@@ -1,5 +1,10 @@
 import { Tabs } from 'expo-router';
-import { Home, ShoppingBag, User } from 'lucide-react-native';
+import { Home, ShoppingBag, User, Settings } from 'lucide-react-native';
+import { useEffect } from 'react';
+import { notificationService } from '../../services/notificationService';
+import { sleepScheduleService } from '../../services/sleepSchedule';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAdmin } from '../../hooks/useAdmin';
 
 const colors = {
   primary: '#5B9BD5',
@@ -7,6 +12,32 @@ const colors = {
 };
 
 export default function TabLayout() {
+  const { user } = useAuth();
+  const { isAdmin, loading: adminLoading } = useAdmin();
+
+  useEffect(() => {
+    // Reinitialize notifications on app start (handles device reboot)
+    const initNotifications = async () => {
+      if (user) {
+        const schedule = await sleepScheduleService.getActive(user.id);
+        if (schedule && schedule.reminder_enabled) {
+          await notificationService.scheduleSleepReminder({
+            bedtime: schedule.bedtime,
+            reminderBefore: schedule.reminder_before,
+            reminderType: schedule.reminder_type,
+            userId: user.id,
+          });
+        }
+      }
+    };
+
+    initNotifications();
+  }, [user]);
+
+  // Tentukan apakah tab Admin harus terlihat
+  // Tab Admin hanya terlihat jika BUKAN loading DAN IS Admin.
+  const showAdminTab = !adminLoading && isAdmin;
+
   return (
     <Tabs
       screenOptions={{
@@ -48,6 +79,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
-    </Tabs>
+           
+   </Tabs>
   );
 }

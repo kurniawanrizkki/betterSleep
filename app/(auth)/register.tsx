@@ -53,8 +53,9 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-        await signUp(email.trim(), password.trim(), fullName.trim());
-        // Auto-redirect to Home handled by _layout.tsx after successful signup
+      await signUp(email.trim(), password.trim(), fullName.trim());
+        Alert.alert('Berhasil Daftar', 'Silahkan cek email anda untuk konfirmasi');
+      router.replace('/(auth)')
     } catch (error) {
         console.error(error);
         Alert.alert('Gagal Daftar', 'Gagal membuat akun. Mungkin email sudah terdaftar atau terjadi kesalahan server.');

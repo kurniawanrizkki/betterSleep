@@ -4,8 +4,9 @@ import {
   Calendar,
   Music,
   Sparkles,
+  Settings, // <-- Import Settings
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react'; // <-- Import useMemo
 import {
   ActivityIndicator,
   RefreshControl,
@@ -20,6 +21,7 @@ import Header from '../../components/Home/Header';
 import StatsCard from '../../components/Home/StatsCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { sleepRecordsService } from '../../services/sleepRecords';
+import { useAdmin } from '../../hooks/useAdmin';
 
 const colors = {
   card: '#FFFFFF',
@@ -32,29 +34,37 @@ const colors = {
   lightBg: '#E8F4F8',
 };
 
-// Data untuk kartu fitur baru dengan Expo Router paths
-const mainFeatures = [
-  { 
-    icon: BookOpen, 
-    label: 'Gratitude Notes', 
-    color: 'white',
-    route: '/gratitude-notes' 
+// Data fitur dasar (DI LUAR KOMPONEN)
+const baseMainFeatures = [
+  {
+    icon: BookOpen,
+    label: 'Gratitude Notes',
+    color: colors.primary,
+    route: '/gratitude-notes',
   },
-  { 
-    icon: Music, 
-    label: 'Musik Relaksasi', 
-    color: '#5B9BD5',
-    route: '/music-relaxation'
+  {
+    icon: Music,
+    label: 'Musik Relaksasi',
+    color: colors.primary,
+    route: '/music-relaxation',
   },
-  { 
-    icon: Calendar, 
-    label: 'Jadwal Atur Tidur', 
-    color: '#5B9BD5',
-    route: '/sleep-schedule'
+  {
+    icon: Calendar,
+    label: 'Jadwal Atur Tidur',
+    color: colors.primary,
+    route: '/sleep-schedule',
   },
 ];
 
-// Random tips array
+// Data fitur Admin (DI LUAR KOMPONEN)
+const adminFeature = {
+  icon: Settings,
+  label: 'Admin',
+  color: colors.primary,
+  route: '/admin/admin',
+};
+
+// Random tips array (DI LUAR KOMPONEN)
 const sleepTips = [
   'Hindari layar gadget 30 menit sebelum tidur untuk kualitas tidur yang lebih baik',
   'Jaga suhu kamar sejuk (18-20°C) untuk tidur yang optimal',
@@ -68,20 +78,30 @@ const sleepTips = [
 
 // Komponen untuk kartu fitur utama
 const MainFeatureCard = ({ icon: Icon, label, color, isLarge = false, onPress }) => (
-  <TouchableOpacity 
-    style={[styles.mainFeatureCard, isLarge && styles.largeFeatureCard]}
+  <TouchableOpacity
+    style={[
+      styles.mainFeatureCard,
+      isLarge && styles.largeFeatureCard,
+      { backgroundColor: isLarge ? colors.primary : colors.card }
+    ]}
     onPress={onPress}
     activeOpacity={0.7}
   >
-    <Icon size={isLarge ? 40 : 30} color={color} />
-    <Text style={[styles.mainFeatureText, isLarge && styles.largeFeatureText]}>{label}</Text>
+    <Icon size={isLarge ? 40 : 30} color={isLarge ? colors.textLight : color} />
+    <Text style={[
+      styles.mainFeatureText,
+      isLarge && styles.largeFeatureText,
+      { color: isLarge ? colors.textLight : colors.text }
+    ]}>{label}</Text>
   </TouchableOpacity>
 );
 
 export default function HomeScreen() {
   const router = useRouter();
+  // --- HOOKS DI SINI (URUTAN KONSTAN) ---
   const { user } = useAuth();
-  
+  const { isAdmin, loading: adminLoading } = useAdmin();
+
   // State untuk data dari Supabase
   const [sleepData, setSleepData] = useState([]);
   const [avgSleep, setAvgSleep] = useState('0.0');
@@ -89,39 +109,49 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [dailyTip, setDailyTip] = useState('');
 
+  // Perhitungan array fitur kondisional menggunakan useMemo
+  // Ini aman karena Hooks (useMemo) dipanggil di tingkat atas, dan logikanya di dalamnya.
+  const features = useMemo(() => {
+    // Jika masih loading, kita tidak dapat memutuskan, jadi gunakan fitur dasar
+    if (adminLoading) {
+      return baseMainFeatures;
+    }
+    // Jika sudah selesai loading dan pengguna adalah admin, tambahkan fitur admin
+    if (isAdmin) {
+      return [...baseMainFeatures, adminFeature];
+    }
+    // Jika sudah selesai loading dan bukan admin, kembalikan fitur dasar
+    return baseMainFeatures;
+  }, [isAdmin, adminLoading]); // Hanya hitung ulang saat status admin berubah
+
   // Load data saat komponen mount
   useEffect(() => {
     if (user) {
       loadWeeklyData();
     }
-    // Set random tip
     setDailyTip(sleepTips[Math.floor(Math.random() * sleepTips.length)]);
   }, [user]);
 
   const loadWeeklyData = async () => {
+    // ... (Fungsi loadWeeklyData tidak berubah, tapi pastikan menggunakan user?.id)
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+
+      const summary = await sleepRecordsService.getWeeklySummary(user.id);
       
-      // Load weekly summary dari Supabase
-      const summary = await sleepRecordsService.getWeeklySummary(user!.id);
-      
-      // Format data untuk StatsCard
       const formattedData = summary.weekData.map(day => ({
         day: day.day,
         hours: day.hours,
       }));
-      
+
       setSleepData(formattedData);
       setAvgSleep(summary.average.toFixed(1));
-      
-      console.log('📊 Weekly data loaded:', {
-        records: formattedData.length,
-        average: summary.average,
-        streak: summary.streak,
-      });
     } catch (error: any) {
       console.error('Error loading weekly data:', error);
-      // Fallback ke data kosong jika error
       setSleepData([
         { day: 'Sen', hours: 0 },
         { day: 'Sel', hours: 0 },
@@ -134,13 +164,13 @@ export default function HomeScreen() {
       setAvgSleep('0.0');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadWeeklyData();
-    // Generate new random tip
     setDailyTip(sleepTips[Math.floor(Math.random() * sleepTips.length)]);
     setRefreshing(false);
   };
@@ -159,7 +189,9 @@ export default function HomeScreen() {
     router.push('/statistics-detail');
   };
 
-  if (loading && !user) {
+  // Tampilkan loading jika data atau status admin belum dimuat (early return)
+  // Ini aman karena hanya ada satu jalur return sebelum hooks lain dipanggil.
+  if (loading || adminLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -169,6 +201,12 @@ export default function HomeScreen() {
       </SafeAreaView>
     );
   }
+
+  // Pisahkan fitur menjadi 1 besar dan sisanya kecil
+  const largeFeature = features[0];
+  const smallFeatures = features.slice(1);
+  const adminFeatureInSmallList = smallFeatures.find(f => f.label === 'Admin');
+  const actualSmallFeatures = smallFeatures.filter(f => f.label !== 'Admin');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -185,12 +223,10 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* HEADER - Menggunakan komponen terpisah */}
         <Header avgSleep={avgSleep} onProfilePress={handleProfilePress} />
 
-        {/* CONTENT AREA */}
         <View style={styles.contentArea}>
-          {/* Stats Card - Menggunakan komponen terpisah dengan onPress */}
+          {/* Stats Card */}
           {loading ? (
             <View style={styles.statsLoadingCard}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -200,21 +236,23 @@ export default function HomeScreen() {
             <StatsCard sleepData={sleepData} onPress={handleStatsPress} />
           )}
 
-          {/* Main Features */}
+          {/* Main Features Grid */}
           <View style={styles.mainFeaturesGrid}>
             <View style={styles.mainFeaturesRow}>
-              {/* Kartu Gratitude Notes (Kartu Besar di Kiri) */}
-              <MainFeatureCard 
-                {...mainFeatures[0]} 
-                isLarge={true}
-                onPress={() => handleFeaturePress(mainFeatures[0].route)}
-              />
-              
-              {/* Kartu Musik Relaksasi & Jadwal Atur Tidur (Dua Kecil di Kanan) */}
+              {/* Kartu Besar di Kiri (index 0) */}
+              {largeFeature && (
+                <MainFeatureCard
+                  {...largeFeature}
+                  isLarge={true}
+                  onPress={() => handleFeaturePress(largeFeature.route)}
+                />
+              )}
+
+              {/* Kartu Kecil di Kanan (index 1 dan 2) */}
               <View style={styles.smallFeaturesCol}>
-                {mainFeatures.slice(1).map((feature, index) => (
-                  <MainFeatureCard 
-                    key={index} 
+                {actualSmallFeatures.map((feature, index) => (
+                  <MainFeatureCard
+                    key={index}
                     {...feature}
                     onPress={() => handleFeaturePress(feature.route)}
                   />
@@ -231,8 +269,24 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.tipText}>{dailyTip}</Text>
           </View>
+          
+          {/* --- KARTU ADMIN DASHBOARD (KONDISIONAL) --- */}
+          {/* Menggunakan fitur admin yang terpisah dari grid */}
+          {adminFeatureInSmallList && (
+              <TouchableOpacity
+                  style={styles.adminCard}
+                  onPress={() => router.push(adminFeatureInSmallList.route)}
+              >
+                  <Settings size={28} color={colors.textLight} />
+                  <View style={styles.adminCardContent}>
+                      <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+                      <Text style={styles.adminCardSubtext}>Kelola Produk, Musik & Pengguna</Text>
+                  </View>
+              </TouchableOpacity>
+          )}
+          {/* ------------------------------------------- */}
 
-          {/* Quick Add Sleep Record (Optional) */}
+          {/* Empty State */}
           {sleepData.every(day => day.hours === 0) && !loading && (
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateEmoji}>😴</Text>
@@ -240,7 +294,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyStateText}>
                 Mulai catat tidur Anda untuk melihat statistik dan analisis
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.addRecordButton}
                 onPress={() => router.push('/statistics-detail')}
               >
@@ -276,14 +330,10 @@ const styles = StyleSheet.create({
     color: colors.secondaryText,
     fontWeight: '500',
   },
-  
-  // Content
   contentArea: {
     padding: 20,
     marginTop: -40,
   },
-
-  // Stats Loading
   statsLoadingCard: {
     backgroundColor: colors.card,
     borderRadius: 20,
@@ -304,8 +354,6 @@ const styles = StyleSheet.create({
     color: colors.secondaryText,
     fontWeight: '500',
   },
-
-  // Main Features
   mainFeaturesGrid: {
     marginBottom: 16,
     paddingTop: 10,
@@ -357,14 +405,10 @@ const styles = StyleSheet.create({
     color: '#FFF',
     letterSpacing: 0.5,
   },
-  
-  // Container untuk dua kartu kecil di kanan
   smallFeaturesCol: {
     width: '49%',
     justifyContent: 'space-between',
   },
-
-  // Tips
   tipCard: {
     backgroundColor: '#FFF',
     borderRadius: 16,
@@ -394,8 +438,6 @@ const styles = StyleSheet.create({
     color: colors.secondaryText,
     lineHeight: 18,
   },
-
-  // Empty State
   emptyStateCard: {
     backgroundColor: colors.lightBg,
     borderRadius: 20,
@@ -433,5 +475,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.textLight,
+  },
+  // --- ADMIN CARD STYLES ---
+  adminCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 10,
+    marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  adminCardContent: {
+    marginLeft: 16,
+  },
+  adminCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textLight,
+    marginBottom: 2,
+  },
+  adminCardSubtext: {
+    fontSize: 12,
+    color: colors.textLight,
+    opacity: 0.8,
   },
 });
