@@ -11,24 +11,17 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  textLight: '#FFFFFF',
-};
-
-// Animated Two-Layer Cloud Wave Component
 const AnimatedSvg = Animated.createAnimatedComponent(Svg);
 
-const TwoLayerCloudWave = () => {
+const TwoLayerCloudWave = ({ background }: { background: string }) => {
   const translateX1 = useRef(new Animated.Value(0)).current;
   const translateX2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Back layer animation - ping pong (bolak-balik)
     Animated.loop(
       Animated.sequence([
         Animated.timing(translateX1, {
@@ -42,11 +35,10 @@ const TwoLayerCloudWave = () => {
           duration: 5000,
           useNativeDriver: true,
           easing: Easing.inOut(Easing.ease),
-        })
+        }),
       ])
     ).start();
 
-    // Front layer animation - ping pong (bolak-balik) dengan timing berbeda
     Animated.loop(
       Animated.sequence([
         Animated.timing(translateX2, {
@@ -60,20 +52,19 @@ const TwoLayerCloudWave = () => {
           duration: 5000,
           useNativeDriver: true,
           easing: Easing.inOut(Easing.ease),
-        })
+        }),
       ])
     ).start();
   }, []);
 
   return (
     <View style={{ height: 120, width: screenWidth, overflow: 'hidden' }}>
-      {/* Back Layer - Animated */}
       <Animated.View
         style={{
           position: 'absolute',
           bottom: 0,
           left: -50,
-          transform: [{ translateX: translateX1 }]
+          transform: [{ translateX: translateX1 }],
         }}
       >
         <Svg height="120" width={screenWidth + 100}>
@@ -91,19 +82,18 @@ const TwoLayerCloudWave = () => {
               L 0,120
               Z
             `}
-            fill="#F0F4F8"
+            fill={background}
             opacity={0.6}
           />
         </Svg>
       </Animated.View>
-      
-      {/* Front Layer - Animated */}
+
       <Animated.View
         style={{
           position: 'absolute',
           bottom: 0,
           left: -30,
-          transform: [{ translateX: translateX2 }]
+          transform: [{ translateX: translateX2 }],
         }}
       >
         <Svg height="120" width={screenWidth + 60}>
@@ -121,7 +111,7 @@ const TwoLayerCloudWave = () => {
               L 0,120
               Z
             `}
-            fill="#FFFFFF"
+            fill={background === '#121212' ? '#2C2C2C' : '#FFFFFF'}
           />
         </Svg>
       </Animated.View>
@@ -129,43 +119,42 @@ const TwoLayerCloudWave = () => {
   );
 };
 
-// Main Header Component
 const Header = ({ avgSleep, onProfilePress }) => {
-  return (
-    <LinearGradient
-      colors={['#6B9DC3', '#8FB3D5', '#A7C7E7', '#C5DCF0']}
-      style={styles.headerGradient}
-    >
-      {/* Profile Button */}
-      <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress}>
-        <View style={styles.profileCircle}>
-          <User size={18} color={colors.primary} />
-        </View>
-        <Text style={styles.byProfile}>by profile</Text>
-      </TouchableOpacity>
+  const { colors, theme } = useTheme();
 
-      {/* Moon, Stars & Sleep Data */}
-      <View style={styles.headerContent}>
-        {/* Moon & Stars */}
+  // ✅ Gradient yang responsif terhadap tema
+  const gradientColors = theme === 'dark'
+    ? ['#1A2A3A', '#253746', '#2F4454', '#3A5163'] // biru gelap yang elegan
+    : ['#6B9DC3', '#8FB3D5', '#A7C7E7', '#C5DCF0'];
+
+  return (
+    <LinearGradient colors={gradientColors} style={styles.headerGradient}>
+            <View style={styles.headerContent}>
         <View style={styles.moonContainer}>
           <Star size={12} color="#FFD700" fill="#FFD700" style={styles.starRight} />
-          <Moon size={70} color="#FFE5B4" fill="#FFE5B4" />
+          <Moon
+            size={70}
+            color={theme.dark ? '#555' : '#FFE5B4'}
+            fill={theme.dark ? '#444' : '#FFE5B4'}
+          />
           <Star size={10} color="#FFD700" fill="#FFD700" style={styles.starBottom} />
         </View>
-        
-        {/* Sleep Display */}
+
         <View style={styles.headerSleepDisplay}>
-          <Text style={styles.headerTitle}>Kualitas Tidur Rata-Rata</Text>
+          <Text style={[styles.headerTitle, { color: colors.textLight }]}>
+            Kualitas Tidur Rata-Rata
+          </Text>
           <View style={styles.sleepDisplayRow}>
-            <Text style={styles.sleepNumberHeader}>{avgSleep}</Text>
-            <Text style={styles.sleepUnitHeader}>Jam</Text>
+            <Text style={[styles.sleepNumberHeader, { color: colors.textLight }]}>
+              {avgSleep}
+            </Text>
+            <Text style={[styles.sleepUnitHeader, { color: colors.textLight }]}>Jam</Text>
           </View>
         </View>
       </View>
 
-      {/* Cloud Wave at bottom */}
       <View style={styles.cloudWaveContainer}>
-        <TwoLayerCloudWave />
+        <TwoLayerCloudWave background={colors.background} />
       </View>
     </LinearGradient>
   );
@@ -178,7 +167,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 20,
   },
-  
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,8 +174,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 40,
   },
-  
-  // Moon & Stars
   moonContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -203,8 +189,6 @@ const styles = StyleSheet.create({
     bottom: 50,
     right: 10,
   },
-  
-  // Sleep Display in Header
   headerSleepDisplay: {
     alignItems: 'center',
     marginBottom: 10,
@@ -212,7 +196,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textLight,
     marginBottom: 5,
   },
   sleepDisplayRow: {
@@ -222,17 +205,14 @@ const styles = StyleSheet.create({
   sleepNumberHeader: {
     fontSize: 70,
     fontWeight: '900',
-    color: '#FFF',
     lineHeight: 80,
     marginRight: 5,
   },
   sleepUnitHeader: {
     fontSize: 18,
-    color: colors.textLight,
     fontWeight: '600',
     marginBottom: 10,
   },
-  
   cloudWaveContainer: {
     position: 'absolute',
     bottom: 0,
@@ -240,8 +220,6 @@ const styles = StyleSheet.create({
     right: 0,
     overflow: 'visible',
   },
-  
-  // Profile Button
   profileBtn: {
     position: 'absolute',
     top: 40,
@@ -253,7 +231,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -264,7 +241,6 @@ const styles = StyleSheet.create({
   },
   byProfile: {
     fontSize: 9,
-    color: '#2C3E50',
     marginTop: 3,
     fontWeight: '600',
   },

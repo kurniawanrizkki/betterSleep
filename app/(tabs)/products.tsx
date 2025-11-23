@@ -11,30 +11,19 @@ import {
   RefreshControl,
   Alert,
   Image,
+  Linking,
 } from 'react-native';
 import { ShoppingBag, Heart, Star, TrendingUp } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { productsService, Product } from '../../services/products';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-const colors = {
-  primary: '#4A6FA5',
-  primaryDark: '#2E4057',
-  accent: '#8AACC8',
-  background: '#E8F1F5',
-  card: '#FFFFFF',
-  text: '#2E4057',
-  textLight: '#FFFFFF',
-  secondaryText: '#7A8B99',
-  success: '#66BB6A',
-  warning: '#FFB74D',
-  danger: '#EF5350',
-};
-
 export default function ProductsScreen() {
   const { user } = useAuth();
-  
+  const { colors } = useTheme();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,16 +37,12 @@ export default function ProductsScreen() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Load all products
       const allProducts = await productsService.getAll();
       setProducts(allProducts);
 
-      // Load featured products
       const featured = await productsService.getFeatured(4);
       setFeaturedProducts(featured);
 
-      // Load user favorites if logged in
       if (user) {
         const userFavorites = await productsService.getUserFavorites(user.id);
         setFavorites(new Set(userFavorites.map(p => p.id)));
@@ -87,11 +72,8 @@ export default function ProductsScreen() {
       
       setFavorites(prev => {
         const newSet = new Set(prev);
-        if (isFavorited) {
-          newSet.add(productId);
-        } else {
-          newSet.delete(productId);
-        }
+        if (isFavorited) newSet.add(productId);
+        else newSet.delete(productId);
         return newSet;
       });
     } catch (error: any) {
@@ -100,14 +82,47 @@ export default function ProductsScreen() {
     }
   };
 
+  // ✅ Fungsi untuk membuka affiliate link
+  const openAffiliateLink = (product: Product) => {
+    if (!product.affiliate_link) {
+      Alert.alert('Info', 'Link afiliasi tidak tersedia untuk produk ini.');
+      return;
+    }
+
+    const url = product.affiliate_link.trim();
+    // Validasi URL dasar
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      Alert.alert('Error', 'Link tidak valid');
+      return;
+    }
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Alert.alert('Error', 'Tidak dapat membuka link ini di perangkat Anda.');
+        }
+      })
+      .catch((err) => {
+        console.error('Gagal membuka URL:', err);
+        Alert.alert('Error', 'Gagal membuka link: ' + err.message);
+      });
+  };
+
   const renderFeaturedProduct = (product: Product) => {
     const isFavorite = favorites.has(product.id);
 
     return (
-      <View key={product.id} style={styles.featuredCard}>
-        <View style={styles.featuredBadge}>
+      <TouchableOpacity
+        key={product.id}
+        style={[styles.featuredCard, { backgroundColor: colors.card }]}
+        onPress={() => openAffiliateLink(product)} // ✅ Tambahkan onPress
+        activeOpacity={0.8}
+      >
+        <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
           <TrendingUp size={14} color={colors.textLight} />
-          <Text style={styles.featuredBadgeText}>Unggulan</Text>
+          <Text style={[styles.featuredBadgeText, { color: colors.textLight }]}>Unggulan</Text>
         </View>
         
         {product.public_image_url ? (
@@ -117,88 +132,41 @@ export default function ProductsScreen() {
             resizeMode="cover"
           />
         ) : (
-          <View style={styles.featuredImagePlaceholder}>
+          <View style={[styles.featuredImagePlaceholder, { backgroundColor: colors.background }]}>
             <ShoppingBag size={48} color={colors.secondaryText} />
           </View>
         )}
 
         <View style={styles.featuredInfo}>
-          <Text style={styles.featuredName} numberOfLines={2}>
+          <Text style={[styles.featuredName, { color: colors.text }]} numberOfLines={2}>
             {product.name}
           </Text>
           
           <View style={styles.featuredMeta}>
             <View style={styles.ratingContainer}>
               <Star size={14} color={colors.warning} fill={colors.warning} />
-              <Text style={styles.ratingText}>{product.rating}</Text>
+              <Text style={[styles.ratingText, { color: colors.text }]}>
+                {product.rating}
+              </Text>
             </View>
-            <Text style={styles.soldText}>
+            <Text style={[styles.soldText, { color: colors.secondaryText }]}>
               {productsService.formatSoldCount(product.sold_count)} terjual
             </Text>
           </View>
 
           <View style={styles.featuredFooter}>
-            <Text style={styles.featuredPrice}>
+            <Text style={[styles.featuredPrice, { color: colors.primary }]}>
               {productsService.formatPrice(product.price)}
             </Text>
             <TouchableOpacity
               style={styles.favoriteBtn}
-              onPress={() => toggleFavorite(product.id)}
+              onPress={(e) => {
+                e.stopPropagation(); // ✅ Cegah klik menembus ke parent
+                toggleFavorite(product.id);
+              }}
             >
               <Heart
                 size={18}
-                color={isFavorite ? colors.danger : colors.primary}
-                fill={isFavorite ? colors.danger : 'transparent'}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderProduct = (product: Product) => {
-    const isFavorite = favorites.has(product.id);
-
-    return (
-      <TouchableOpacity key={product.id} style={styles.productCard}>
-        {product.public_image_url ? (
-          <Image 
-            source={{ uri: product.public_image_url }}
-            style={styles.productImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <ShoppingBag size={36} color={colors.secondaryText} />
-          </View>
-        )}
-
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>
-            {product.name}
-          </Text>
-          
-          <View style={styles.productMeta}>
-            <View style={styles.ratingContainer}>
-              <Star size={12} color={colors.warning} fill={colors.warning} />
-              <Text style={styles.productRating}>{product.rating}</Text>
-            </View>
-            <Text style={styles.productSold}>
-              {productsService.formatSoldCount(product.sold_count)}
-            </Text>
-          </View>
-
-          <View style={styles.productFooter}>
-            <Text style={styles.productPrice}>
-              {productsService.formatPrice(product.price)}
-            </Text>
-            <TouchableOpacity
-              style={styles.productBtn}
-              onPress={() => toggleFavorite(product.id)}
-            >
-              <Heart
-                size={16}
                 color={isFavorite ? colors.danger : colors.primary}
                 fill={isFavorite ? colors.danger : 'transparent'}
               />
@@ -209,88 +177,165 @@ export default function ProductsScreen() {
     );
   };
 
+  const renderProduct = (product: Product) => {
+    const isFavorite = favorites.has(product.id);
+
+    return (
+      <TouchableOpacity 
+        key={product.id} 
+        style={[styles.productCard, { backgroundColor: colors.card }]}
+        onPress={() => openAffiliateLink(product)} // ✅ Tambahkan onPress
+        activeOpacity={0.8}
+      >
+        {product.public_image_url ? (
+          <Image 
+            source={{ uri: product.public_image_url }}
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.productImagePlaceholder, { backgroundColor: colors.background }]}>
+            <ShoppingBag size={36} color={colors.secondaryText} />
+          </View>
+        )}
+
+        <View style={styles.productInfo}>
+          <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
+            {product.name}
+          </Text>
+          
+          <View style={styles.productMeta}>
+            <View style={styles.ratingContainer}>
+              <Star size={12} color={colors.warning} fill={colors.warning} />
+              <Text style={[styles.productRating, { color: colors.secondaryText }]}>
+                {product.rating}
+              </Text>
+            </View>
+            <Text style={[styles.productSold, { color: colors.secondaryText }]}>
+              {productsService.formatSoldCount(product.sold_count)}
+            </Text>
+          </View>
+
+          <View style={styles.productFooter}>
+            <Text style={[styles.productPrice, { color: colors.primary }]}>
+              {productsService.formatPrice(product.price)}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.productBtn,
+                { 
+                  borderColor: isFavorite 
+                    ? colors.danger + '40' 
+                    : colors.primary + '40',
+                  backgroundColor: isFavorite ? colors.danger + '10' : 'transparent'
+                }
+              ]}
+              onPress={(e) => {
+                e.stopPropagation(); // ✅ Cegah konflik klik
+                toggleFavorite(product.id);
+              }}
+            >
+              <Heart
+                size={16}
+                color={isFavorite ? colors.danger : colors.primary}
+                fill={isFavorite ? colors.danger + '30' : 'transparent'}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <ShoppingBag size={28} color={colors.primary} />
-          <Text style={styles.headerTitle}>Produk Penunjang Tidur</Text>
-        </View>
-        
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat produk...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.header}>
+            <ShoppingBag size={28} color={colors.primary} />
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Produk Penunjang Tidur</Text>
+          </View>
+          
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Memuat produk...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <ShoppingBag size={28} color={colors.primary} />
-          <Text style={styles.headerTitle}>Produk Penunjang Tidur</Text>
-        </View>
-        <Text style={styles.headerSubtitle}>
-          Temukan produk terbaik untuk tidur berkualitas
-        </Text>
-
-        {/* Featured Products Section */}
-        {featuredProducts.length > 0 && (
-          <View style={styles.featuredSection}>
-            <View style={styles.sectionHeader}>
-              <TrendingUp size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Produk Unggulan</Text>
-            </View>
-            
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.featuredScroll}
-            >
-              {featuredProducts.map(renderFeaturedProduct)}
-            </ScrollView>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          <View style={styles.header}>
+            <ShoppingBag size={28} color={colors.primary} />
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Produk Penunjang Tidur</Text>
           </View>
-        )}
+          <Text style={[styles.headerSubtitle, { color: colors.secondaryText }]}>
+            Temukan produk terbaik untuk tidur berkualitas
+          </Text>
 
-        {/* All Products Section */}
-        <View style={styles.allProductsSection}>
-          <Text style={styles.sectionTitle}>Semua Produk</Text>
-          
-          {products.length === 0 ? (
-            <View style={styles.emptyState}>
-              <ShoppingBag size={64} color={colors.secondaryText} />
-              <Text style={styles.emptyStateText}>Belum ada produk</Text>
-            </View>
-          ) : (
-            <View style={styles.productsGrid}>
-              {products.map(renderProduct)}
+          {featuredProducts.length > 0 && (
+            <View style={styles.featuredSection}>
+              <View style={styles.sectionHeader}>
+                <TrendingUp size={20} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Produk Unggulan</Text>
+              </View>
+              
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.featuredScroll}
+              >
+                {featuredProducts.map(renderFeaturedProduct)}
+              </ScrollView>
             </View>
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+
+          <View style={styles.allProductsSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Semua Produk</Text>
+            
+            {products.length === 0 ? (
+              <View style={styles.emptyState}>
+                <ShoppingBag size={64} color={colors.secondaryText} />
+                <Text style={[styles.emptyStateText, { color: colors.secondaryText }]}>
+                  Belum ada produk
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.productsGrid}>
+                {products.map(renderProduct)}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
@@ -307,7 +352,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: colors.secondaryText,
     fontWeight: '500',
   },
   header: {
@@ -321,11 +365,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '800',
-    color: colors.text,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: colors.secondaryText,
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 24,
@@ -344,7 +386,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
   },
   featuredScroll: {
     paddingHorizontal: 20,
@@ -352,7 +393,6 @@ const styles = StyleSheet.create({
   },
   featuredCard: {
     width: 280,
-    backgroundColor: colors.card,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -368,7 +408,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -377,17 +416,14 @@ const styles = StyleSheet.create({
   featuredBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textLight,
   },
   featuredImage: {
     width: '100%',
     height: 180,
-    backgroundColor: colors.background,
   },
   featuredImagePlaceholder: {
     width: '100%',
     height: 180,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -397,7 +433,6 @@ const styles = StyleSheet.create({
   featuredName: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 8,
     minHeight: 44,
   },
@@ -415,11 +450,9 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
   },
   soldText: {
     fontSize: 12,
-    color: colors.secondaryText,
   },
   featuredFooter: {
     flexDirection: 'row',
@@ -429,7 +462,6 @@ const styles = StyleSheet.create({
   featuredPrice: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.primary,
   },
   favoriteBtn: {
     padding: 8,
@@ -444,7 +476,6 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 16,
-    color: colors.secondaryText,
     marginTop: 16,
   },
   productsGrid: {
@@ -454,7 +485,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   productCard: {
-    backgroundColor: colors.card,
     borderRadius: 20,
     width: (screenWidth - 56) / 2,
     overflow: 'hidden',
@@ -468,12 +498,10 @@ const styles = StyleSheet.create({
   productImage: {
     width: '100%',
     height: 120,
-    backgroundColor: colors.background,
   },
   productImagePlaceholder: {
     width: '100%',
     height: 120,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -483,7 +511,6 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 8,
     minHeight: 40,
   },
@@ -494,12 +521,10 @@ const styles = StyleSheet.create({
   },
   productRating: {
     fontSize: 12,
-    color: colors.secondaryText,
     fontWeight: '600',
   },
   productSold: {
     fontSize: 12,
-    color: colors.secondaryText,
     fontWeight: '600',
   },
   productFooter: {
@@ -510,15 +535,12 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.primary,
   },
   productBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: colors.primary + '40',
-    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },

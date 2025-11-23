@@ -6,82 +6,79 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  secondaryText: '#7F8C8D',
-  success: '#4CAF50',
-};
+import { useTheme } from '../../contexts/ThemeContext'; // ✅ Impor useTheme
 
 const StatsCard = ({ sleepData, onPress }) => {
+  const { colors } = useTheme(); // ✅ Ambil warna dari tema
+
   // Hitung rata-rata tidur
-  const avgSleep = (sleepData.reduce((sum, day) => sum + day.hours, 0) / sleepData.length).toFixed(1);
-  // Hitung max hours untuk scaling bar chart
-  const maxHours = Math.max(...sleepData.map(d => d.hours));
-  // Hitung target dan progress (contoh: target 8 jam)
+  const avgSleep = sleepData.length
+    ? (sleepData.reduce((sum, day) => sum + day.hours, 0) / sleepData.length).toFixed(1)
+    : '0.0';
+
+  // Hitung max hours untuk scaling
+  const maxHours = sleepData.length ? Math.max(...sleepData.map(d => d.hours)) : 1;
+
   const target = 8;
-  const progress = Math.round((avgSleep / target) * 100);
-  // Tentukan status berdasarkan rata-rata tidur
+  const progress = sleepData.length ? Math.round((parseFloat(avgSleep) / target) * 100) : 0;
+
   const getStatus = () => {
-    if (avgSleep >= 7.5) return { text: 'On Track', color: colors.success };
-    if (avgSleep >= 6.5) return { text: 'Good', color: '#FFA726' };
-    return { text: 'Need Rest', color: '#EF5350' };
+    const avg = parseFloat(avgSleep);
+    if (avg >= 7.5) return { text: 'On Track', color: colors.success };
+    if (avg >= 6.5) return { text: 'Good', color: colors.warning };
+    return { text: 'Need Rest', color: colors.danger };
   };
-  
+
   const status = getStatus();
 
   return (
-    <TouchableOpacity 
-      style={styles.statsCard}
+    <TouchableOpacity
+      style={[styles.statsCard, { backgroundColor: colors.card }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Statistik 7 Hari Terakhir</Text>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>Statistik 7 Hari Terakhir</Text>
         <ChevronRight size={20} color={colors.primary} />
       </View>
-      
-      {/* Stats Row - Target, Progress, Status */}
-      <View style={styles.statsRow}>
+
+      <View style={[styles.statsRow, { borderBottomColor: colors.border }]}>
         <View style={styles.statCol}>
-          <Text style={styles.statLabel}>My Target</Text>
-          <Text style={styles.statValue}>{target}h</Text>
+          <Text style={[styles.statLabel, { color: colors.secondaryText }]}>My Target</Text>
+          <Text style={[styles.statValue, { color: colors.primary }]}>{target}h</Text>
         </View>
         <View style={styles.statCol}>
-          <Text style={styles.statLabel}>Progress</Text>
-          <Text style={[styles.statValue, {color: status.color}]}>{progress}%</Text>
+          <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Progress</Text>
+          <Text style={[styles.statValue, { color: status.color }]}>{progress}%</Text>
         </View>
         <View style={styles.statCol}>
-          <Text style={styles.statLabel}>Status</Text>
-          <Text style={[styles.statValue, {color: status.color}]}>{status.text}</Text>
+          <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Status</Text>
+          <Text style={[styles.statValue, { color: status.color }]}>{status.text}</Text>
         </View>
       </View>
 
-      {/* Bar Chart */}
       <View style={styles.chart}>
         {sleepData.map((day, index) => (
           <View key={index} style={styles.bar}>
-            <View style={styles.barContainer}>
-              <View style={[
-                styles.barFill,
-                {
-                  height: `${(day.hours / maxHours) * 100}%`,
-                  backgroundColor: day.hours >= 7 ? colors.primary : '#A7C7E7' 
-                }
-              ]}>
-              </View>
+            <View style={[styles.barContainer, { backgroundColor: colors.inputBackground }]}>
+              <View
+                style={[
+                  styles.barFill,
+                  {
+                    height: `${(day.hours / (maxHours || 1)) * 100}%`,
+                    backgroundColor: day.hours >= 7 ? colors.primary : colors.accent,
+                  },
+                ]}
+              />
             </View>
-            {/* Teks Jam di atas bar */}
-            <Text style={styles.barTextNew}>{day.hours}h</Text>
-            {/* Label Hari */}
-            <Text style={styles.barLabel}>{day.day}</Text>
+            <Text style={[styles.barTextNew, { color: colors.text }]}>{day.hours}h</Text>
+            <Text style={[styles.barLabel, { color: colors.secondaryText }]}>{day.day}</Text>
           </View>
         ))}
       </View>
-      
-      <View style={styles.viewMoreHint}>
-        <Text style={styles.viewMoreText}>Tap untuk lihat detail statistik</Text>
+
+      <View style={[styles.viewMoreHint, { borderTopColor: colors.border }]}>
+        <Text style={[styles.viewMoreText, { color: colors.primary }]}>Tap untuk lihat detail statistik</Text>
       </View>
     </TouchableOpacity>
   );
@@ -89,7 +86,6 @@ const StatsCard = ({ sleepData, onPress }) => {
 
 const styles = StyleSheet.create({
   statsCard: {
-    backgroundColor: '#FFF',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
@@ -108,33 +104,25 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.text,
   },
-  
-  // Stats Row
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   statCol: {
     alignItems: 'center',
   },
   statLabel: {
     fontSize: 11,
-    color: colors.secondaryText,
     marginBottom: 4,
   },
   statValue: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.primary,
   },
-  
-  // Chart
   chart: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -151,7 +139,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 120,
     justifyContent: 'flex-end',
-    backgroundColor: '#F5F5F5',
     borderRadius: 6,
   },
   barFill: {
@@ -161,24 +148,20 @@ const styles = StyleSheet.create({
   barTextNew: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.text,
     textAlign: 'center',
   },
   barLabel: {
     fontSize: 10,
-    color: colors.secondaryText,
     fontWeight: '600',
   },
   viewMoreHint: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
     alignItems: 'center',
   },
   viewMoreText: {
     fontSize: 11,
-    color: colors.primary,
     fontStyle: 'italic',
   },
 });

@@ -1,98 +1,83 @@
-import {
-  createContext,
-  PropsWithChildren,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import { Appearance, useColorScheme as useSystemColorScheme } from 'react-native';
-// Pastikan Anda telah menginstal @react-native-async-storage/async-storage
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppColors, AppTheme, DarkTheme, LightTheme } from '../constants/theme';
+import { AppColors } from '../constants/theme';
 
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type Theme = 'light' | 'dark';
+export type ThemePreference = 'system' | Theme;
 
 interface ThemeContextType {
-  theme: AppTheme;
-  colors: AppColors;
   themePreference: ThemePreference;
-  setThemePreference: (preference: ThemePreference) => Promise<void>;
+  setThemePreference: (preference: ThemePreference) => void;
+  colors: typeof AppColors.light;
+  theme: Theme;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+const STORAGE_KEY = '@theme_preference';
 
-const THEME_STORAGE_KEY = 'user-theme-preference';
-
-// Hook kustom untuk digunakan di komponen
-export const useTheme = (): ThemeContextType => {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+const useAppTheme = (preference: ThemePreference): Theme => {
+  const systemTheme = useColorScheme() as Theme | null;
+  if (preference === 'system') {
+    return systemTheme || 'light';
   }
-  return context;
+  return preference;
 };
 
-// Theme Provider Component
-export const ThemeProvider = ({ children }: PropsWithChildren) => {
-  const systemColorScheme = useSystemColorScheme(); // Tema dari OS ('light' atau 'dark')
+export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
-  const [currentTheme, setCurrentTheme] = useState<AppTheme>(LightTheme);
-  const [loading, setLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Muat preferensi tema dari penyimpanan lokal
+  const activeTheme = useAppTheme(themePreference);
+  const colors = AppColors[activeTheme];
+
   useEffect(() => {
-    const loadThemePreference = async () => {
+    const loadPreference = async () => {
       try {
-        const storedPreference = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-        if (storedPreference && ['light', 'dark', 'system'].includes(storedPreference)) {
-          setThemePreferenceState(storedPreference as ThemePreference);
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        if (stored && ['system', 'light', 'dark'].includes(stored)) {
+          setThemePreferenceState(stored as ThemePreference);
         }
-      } catch (error) {
-        console.error('Failed to load theme preference:', error);
+      } catch (e) {
+        console.error("Gagal memuat preferensi tema", e);
       } finally {
-        setLoading(false);
+        setIsLoaded(true);
       }
     };
-    loadThemePreference();
+    loadPreference();
   }, []);
 
-  // Hitung dan terapkan tema aktif
-  useEffect(() => {
-    let activeTheme: AppTheme;
-
-    if (themePreference === 'system') {
-      activeTheme = (systemColorScheme === 'dark') ? DarkTheme : LightTheme;
-    } else {
-      activeTheme = (themePreference === 'dark') ? DarkTheme : LightTheme;
-    }
-
-    // Mengatur gaya status bar global
-    Appearance.setColorScheme(activeTheme.dark ? 'dark' : 'light');
-
-    setCurrentTheme(activeTheme);
-  }, [themePreference, systemColorScheme]);
-
-  // Fungsi untuk memperbarui preferensi tema dan menyimpannya
   const setThemePreference = async (preference: ThemePreference) => {
     try {
-      await AsyncStorage.setItem(THEME_STORAGE_KEY, preference);
+      await AsyncStorage.setItem(STORAGE_KEY, preference);
       setThemePreferenceState(preference);
-    } catch (error) {
-      console.error('Failed to save theme preference:', error);
+    } catch (e) {
+      console.error("Gagal menyimpan preferensi tema", e);
     }
   };
 
-  if (loading) {
-    // Tampilkan null saat loading (akan digantikan oleh RootLayoutNav saat tema dimuat)
-    return null; 
+  if (!isLoaded) {
+    return null;
   }
 
-  const value: ThemeContextType = {
-    theme: currentTheme,
-    colors: currentTheme.colors,
-    themePreference,
-    setThemePreference,
-  };
+  return (
+    <ThemeContext.Provider
+      value={{
+        themePreference,
+        setThemePreference,
+        colors,
+        theme: activeTheme,
+      }}
+    >
+      {children}
+    </ThemeContext.Provider>
+  );
+}
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
-};
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within ThemeProvider');
+  }
+  return context;
+}

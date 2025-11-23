@@ -1,22 +1,20 @@
 import { Tabs } from 'expo-router';
 import { Home, ShoppingBag, User, Settings } from 'lucide-react-native';
 import { useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 import { notificationService } from '../../services/notificationService';
 import { sleepScheduleService } from '../../services/sleepSchedule';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdmin } from '../../hooks/useAdmin';
 
-const colors = {
-  primary: '#5B9BD5',
-  secondaryText: '#7F8C8D',
-};
-
 export default function TabLayout() {
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    // Reinitialize notifications on app start (handles device reboot)
     const initNotifications = async () => {
       if (user) {
         const schedule = await sleepScheduleService.getActive(user.id);
@@ -30,12 +28,9 @@ export default function TabLayout() {
         }
       }
     };
-
     initNotifications();
   }, [user]);
 
-  // Tentukan apakah tab Admin harus terlihat
-  // Tab Admin hanya terlihat jika BUKAN loading DAN IS Admin.
   const showAdminTab = !adminLoading && isAdmin;
 
   return (
@@ -45,11 +40,11 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.secondaryText,
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.card,
           borderTopWidth: 1,
-          borderTopColor: '#E0E0E0',
-          height: 60,
-          paddingBottom: 8,
+          borderTopColor: colors.border,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -79,7 +74,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
-           
-   </Tabs>
+      {showAdminTab && (
+        <Tabs.Screen
+          name="admin"
+          options={{
+            title: 'Admin',
+            tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          }}
+        />
+      )}
+    </Tabs>
   );
 }

@@ -24,20 +24,10 @@ import {
   X,
   Folder,
 } from 'lucide-react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 import { musicService, MusicCategory, MusicTrack } from '../../services/music';
 import * as DocumentPicker from 'expo-document-picker';
-
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  textLight: '#FFFFFF',
-  secondaryText: '#7F8C8D',
-  background: '#F5F9FC',
-  card: '#FFFFFF',
-  success: '#4CAF50',
-  warning: '#FFA726',
-  danger: '#EF5350',
-};
+import { Picker } from '@react-native-picker/picker'; // ✅ Impor Picker
 
 type ViewMode = 'categories' | 'tracks';
 
@@ -61,7 +51,9 @@ interface TrackForm {
 
 export default function AdminMusicScreen() {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<ViewMode>('tracks'); // Default view
+  const { colors } = useTheme();
+
+  const [viewMode, setViewMode] = useState<ViewMode>('tracks');
   const [categories, setCategories] = useState<MusicCategory[]>([]);
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,32 +61,26 @@ export default function AdminMusicScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Category State
-  const [editingCategory, setEditingCategory] = useState<MusicCategory | null>(
-    null
-  );
+  const [editingCategory, setEditingCategory] = useState<MusicCategory | null>(null);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({
     name: '',
     description: '',
-    icon: 'music', // Default icon
+    icon: 'music',
     sort_order: '0',
     is_active: true,
   });
 
-  // Track State
   const [editingTrack, setEditingTrack] = useState<MusicTrack | null>(null);
   const [trackForm, setTrackForm] = useState<TrackForm>({
-    category_id: categories[0]?.id || '', // Default to first category
+    category_id: '',
     name: '',
     description: '',
     duration: '0',
-    color: '#5B9BD5', // Default color
+    color: '#5B9BD5',
     is_premium: false,
     is_active: true,
   });
-  const [audioFile, setAudioFile] = useState<{ uri: string; name: string } | null>(
-    null
-  );
+  const [audioFile, setAudioFile] = useState<{ uri: string; name: string } | null>(null);
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
 
   useEffect(() => {
@@ -105,12 +91,14 @@ export default function AdminMusicScreen() {
     try {
       setLoading(true);
       const [allTracks, allCategories] = await Promise.all([
-        // FIX: Menggunakan nama fungsi yang benar: getAllTracks dan getAllCategories
-        musicService.getAllTracks(), // <-- PERBAIKAN DI SINI
-        musicService.getAllCategories(), // <-- PERBAIKAN DI SINI
+        musicService.getAllTracks(),
+        musicService.getAllCategories(),
       ]);
       setTracks(allTracks);
       setCategories(allCategories);
+      if (allCategories.length > 0 && !editingTrack) {
+        setTrackForm(prev => ({ ...prev, category_id: allCategories[0].id }));
+      }
     } catch (error) {
       console.error('Error loading music data:', error);
       Alert.alert('Error', 'Failed to load music data');
@@ -167,7 +155,7 @@ export default function AdminMusicScreen() {
       };
 
       if (editingCategory) {
-        await musicService.updateCategory(editingCategory.id, categoryData); 
+        await musicService.updateCategory(editingCategory.id, categoryData);
         Alert.alert('Success', 'Category updated successfully');
       } else {
         await musicService.createCategory(categoryData);
@@ -188,7 +176,7 @@ export default function AdminMusicScreen() {
   const openAddTrackModal = () => {
     setEditingTrack(null);
     setTrackForm({
-      category_id: categories[0]?.id || '', // Default to first category
+      category_id: categories[0]?.id || '',
       name: '',
       description: '',
       duration: '0',
@@ -212,7 +200,7 @@ export default function AdminMusicScreen() {
       is_premium: track.is_premium,
       is_active: track.is_active,
     });
-    setAudioFile(null); // Clear pending audio file
+    setAudioFile(null);
     setCurrentFilePath(track.file_path);
     setModalVisible(true);
   };
@@ -244,11 +232,7 @@ export default function AdminMusicScreen() {
       Alert.alert('Validation', 'Category is required');
       return;
     }
-    if (
-      !editingTrack &&
-      !audioFile &&
-      !trackForm.file_path // In case file_path was handled differently
-    ) {
+    if (!editingTrack && !audioFile && !currentFilePath) {
       Alert.alert('Validation', 'Audio file is required for new tracks');
       return;
     }
@@ -257,17 +241,13 @@ export default function AdminMusicScreen() {
     try {
       let file_path = currentFilePath;
 
-      // Upload audio file if new file selected
       if (audioFile) {
         const uploadResult = await musicService.uploadAudio(audioFile.uri, audioFile.name);
         file_path = uploadResult.filePath;
-        
-        console.log('Audio uploaded:', uploadResult);
       }
 
-      // Check if file_path is still null after upload attempt (shouldn't happen for new tracks)
       if (!file_path) {
-         throw new Error("Missing audio file path after upload.");
+        throw new Error("Missing audio file path after upload.");
       }
 
       const trackData: Partial<MusicTrack> = {
@@ -278,20 +258,17 @@ export default function AdminMusicScreen() {
         color: trackForm.color,
         is_premium: trackForm.is_premium,
         is_active: trackForm.is_active,
-        file_path: file_path, // Set file_path from the current/uploaded file
+        file_path,
       };
 
       if (editingTrack) {
         await musicService.updateTrack(editingTrack.id, trackData);
         Alert.alert('Success', 'Track updated successfully');
       } else {
-        // Remove file_path since it will be part of trackData (must be a clean payload)
-        const newTrackData = {
+        await musicService.createTrack({
           ...trackData,
-          file_path: file_path
-        } as Omit<Partial<MusicTrack>, 'id' | 'play_count' | 'thumbnail_url'> & { file_path: string }; // Ensure file_path is present for new tracks
-        
-        await musicService.createTrack(newTrackData);
+          file_path,
+        } as any);
         Alert.alert('Success', 'Track created successfully');
       }
 
@@ -353,16 +330,14 @@ export default function AdminMusicScreen() {
     );
   };
 
-  // --- Render Functions ---
-
   const renderTrackItem = (track: MusicTrack) => (
-    <View key={track.id} style={styles.listItem}>
+    <View key={track.id} style={[styles.listItem, { backgroundColor: colors.card }]}>
       <MusicIcon size={20} color={colors.primary} style={{ marginRight: 12 }} />
       <View style={styles.itemContent}>
-        <Text style={styles.itemName} numberOfLines={1}>
+        <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
           {track.name}
         </Text>
-        <Text style={styles.itemMeta}>
+        <Text style={[styles.itemMeta, { color: colors.secondaryText }]}>
           {musicService.formatDuration(track.duration)} •{' '}
           {track.is_premium ? 'Premium' : 'Free'}
         </Text>
@@ -385,13 +360,13 @@ export default function AdminMusicScreen() {
   );
 
   const renderCategoryItem = (category: MusicCategory) => (
-    <View key={category.id} style={styles.listItem}>
+    <View key={category.id} style={[styles.listItem, { backgroundColor: colors.card }]}>
       <Folder size={20} color={colors.primary} style={{ marginRight: 12 }} />
       <View style={styles.itemContent}>
-        <Text style={styles.itemName} numberOfLines={1}>
+        <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
           {category.name}
         </Text>
-        <Text style={styles.itemMeta}>
+        <Text style={[styles.itemMeta, { color: colors.secondaryText }]}>
           {category.sort_order}
           {category.is_active ? ' • Active' : ' • Inactive'}
         </Text>
@@ -415,53 +390,62 @@ export default function AdminMusicScreen() {
 
   const renderTrackModal = () => (
     <>
-      {/* File Picker */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Audio File *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Audio File *</Text>
         <TouchableOpacity
-          style={styles.filePicker}
+          style={[styles.filePicker, { borderColor: colors.primary + '40' }]}
           onPress={pickAudioFile}
           disabled={saving}
         >
           {audioFile || currentFilePath ? (
-            <View style={styles.filePickerSelected}>
+            <View style={[styles.filePickerSelected, { backgroundColor: colors.primary + '10' }]}>
               <MusicIcon size={32} color={colors.success} />
-              <Text style={styles.filePickerText}>
+              <Text style={[styles.filePickerText, { color: colors.text }]}>
                 {audioFile ? audioFile.name : currentFilePath?.split('/').pop()}
               </Text>
-              <Text style={styles.filePickerSubtext}>
+              <Text style={[styles.filePickerSubtext, { color: colors.secondaryText }]}>
                 {currentFilePath && !audioFile ? '(Current File)' : '(New File Selected)'}
               </Text>
             </View>
           ) : (
-            <View style={styles.filePickerPlaceholder}>
+            <View style={[styles.filePickerPlaceholder, { backgroundColor: colors.card }]}>
               <Upload size={32} color={colors.secondaryText} />
-              <Text style={styles.filePickerText}>Tap to select audio file (MP3/WAV)</Text>
+              <Text style={[styles.filePickerText, { color: colors.secondaryText }]}>
+                Tap to select audio file (MP3/WAV)
+              </Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Category ID (Simple dropdown simulation with TextInput for now) */}
+      {/* ✅ DROPDOWN KATEGORI */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Category ID *</Text>
-        <TextInput
-          style={styles.input}
-          value={trackForm.category_id}
-          onChangeText={(text) => setTrackForm({ ...trackForm, category_id: text })}
-          placeholder="Enter category ID (e.g., uuid-123)"
-          placeholderTextColor={colors.secondaryText}
-        />
-        <Text style={styles.itemMeta}>
-          Available IDs: {categories.map((c) => c.name).join(', ')}
-        </Text>
+        <Text style={[styles.label, { color: colors.text }]}>Category *</Text>
+        <View style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, paddingHorizontal: 0 }]}>
+          <Picker
+            selectedValue={trackForm.category_id}
+            onValueChange={(itemValue) =>
+              setTrackForm({ ...trackForm, category_id: itemValue })
+            }
+            style={{ color: colors.text, height: 50 }}
+            dropdownIconColor={colors.text}
+          >
+            {categories.map((category) => (
+              <Picker.Item
+                key={category.id}
+                label={category.name}
+                value={category.id}
+                color={colors.text}
+              />
+            ))}
+          </Picker>
+        </View>
       </View>
 
-      {/* Name */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Track Name *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Track Name *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
           value={trackForm.name}
           onChangeText={(text) => setTrackForm({ ...trackForm, name: text })}
           placeholder="Enter track name"
@@ -469,11 +453,14 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Description */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Description</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Description</Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[
+            styles.input,
+            styles.textArea,
+            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }
+          ]}
           value={trackForm.description}
           onChangeText={(text) => setTrackForm({ ...trackForm, description: text })}
           placeholder="Enter track description (optional)"
@@ -483,11 +470,10 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Duration (in seconds) */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Duration (seconds)</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Duration (seconds)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
           value={trackForm.duration}
           onChangeText={(text) => setTrackForm({ ...trackForm, duration: text })}
           placeholder="e.g., 180"
@@ -496,11 +482,10 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Color */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Color (Hex)</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Color (Hex)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
           value={trackForm.color}
           onChangeText={(text) => setTrackForm({ ...trackForm, color: text })}
           placeholder="#5B9BD5"
@@ -508,23 +493,22 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Switches */}
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Premium Track</Text>
+      <View style={[styles.switchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.label, { color: colors.text }]}>Premium Track</Text>
         <Switch
           value={trackForm.is_premium}
           onValueChange={(value) => setTrackForm({ ...trackForm, is_premium: value })}
-          trackColor={{ false: '#D1D5DB', true: colors.warning }}
+          trackColor={{ false: colors.border, true: colors.warning }}
           thumbColor={colors.textLight}
         />
       </View>
 
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Active</Text>
+      <View style={[styles.switchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.label, { color: colors.text }]}>Active</Text>
         <Switch
           value={trackForm.is_active}
           onValueChange={(value) => setTrackForm({ ...trackForm, is_active: value })}
-          trackColor={{ false: '#D1D5DB', true: colors.success }}
+          trackColor={{ false: colors.border, true: colors.success }}
           thumbColor={colors.textLight}
         />
       </View>
@@ -533,11 +517,10 @@ export default function AdminMusicScreen() {
 
   const renderCategoryModal = () => (
     <>
-      {/* Name */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Category Name *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Category Name *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
           value={categoryForm.name}
           onChangeText={(text) => setCategoryForm({ ...categoryForm, name: text })}
           placeholder="Enter category name"
@@ -545,11 +528,14 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Description */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Description</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Description</Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[
+            styles.input,
+            styles.textArea,
+            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }
+          ]}
           value={categoryForm.description}
           onChangeText={(text) => setCategoryForm({ ...categoryForm, description: text })}
           placeholder="Enter description (optional)"
@@ -559,11 +545,10 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Sort Order */}
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Sort Order</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Sort Order</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
           value={categoryForm.sort_order}
           onChangeText={(text) => setCategoryForm({ ...categoryForm, sort_order: text })}
           placeholder="0"
@@ -572,13 +557,12 @@ export default function AdminMusicScreen() {
         />
       </View>
 
-      {/* Switches */}
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Active</Text>
+      <View style={[styles.switchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.label, { color: colors.text }]}>Active</Text>
         <Switch
           value={categoryForm.is_active}
           onValueChange={(value) => setCategoryForm({ ...categoryForm, is_active: value })}
-          trackColor={{ false: '#D1D5DB', true: colors.success }}
+          trackColor={{ false: colors.border, true: colors.success }}
           thumbColor={colors.textLight}
         />
       </View>
@@ -587,151 +571,157 @@ export default function AdminMusicScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading music data...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Loading music data...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Music</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={
-            viewMode === 'tracks' ? openAddTrackModal : openAddCategoryModal
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: colors.background }]} 
+            onPress={() => router.back()}
+          >
+            <ChevronLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Manage Music</Text>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: colors.primary }]} 
+            onPress={viewMode === 'tracks' ? openAddTrackModal : openAddCategoryModal}
+          >
+            <Plus size={24} color={colors.textLight} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.toggleContainer, { backgroundColor: colors.card }]}>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              viewMode === 'tracks' && styles.toggleActive(colors.primary),
+            ]}
+            onPress={() => setViewMode('tracks')}
+          >
+            <Text
+              style={[
+                styles.toggleText,
+                { color: viewMode === 'tracks' ? colors.textLight : colors.secondaryText },
+              ]}
+            >
+              Tracks ({tracks.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              viewMode === 'categories' && styles.toggleActive(colors.primary),
+            ]}
+            onPress={() => setViewMode('categories')}
+          >
+            <Text
+              style={[
+                styles.toggleText,
+                { color: viewMode === 'categories' ? colors.textLight : colors.secondaryText },
+              ]}
+            >
+              Categories ({categories.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
           }
         >
-          <Plus size={24} color={colors.textLight} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Toggle View */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            viewMode === 'tracks' && styles.toggleActive,
-          ]}
-          onPress={() => setViewMode('tracks')}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              viewMode === 'tracks' && styles.toggleTextActive,
-            ]}
-          >
-            Tracks ({tracks.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            viewMode === 'categories' && styles.toggleActive,
-          ]}
-          onPress={() => setViewMode('categories')}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              viewMode === 'categories' && styles.toggleTextActive,
-            ]}
-          >
-            Categories ({categories.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* List */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        {viewMode === 'tracks' ? (
-          tracks.length === 0 ? (
-            <Text style={styles.emptyText}>No tracks found. Tap + to add one.</Text>
-          ) : (
-            tracks.map(renderTrackItem)
-          )
-        ) : categories.length === 0 ? (
-          <Text style={styles.emptyText}>
-            No categories found. Tap + to add one.
-          </Text>
-        ) : (
-          categories.map(renderCategoryItem)
-        )}
-      </ScrollView>
-
-      {/* Modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {viewMode === 'tracks'
-                ? editingTrack
-                  ? 'Edit Track'
-                  : 'Add New Track'
-                : editingCategory
-                ? 'Edit Category'
-                : 'Add New Category'}
+          {viewMode === 'tracks' ? (
+            tracks.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                No tracks found. Tap + to add one.
+              </Text>
+            ) : (
+              tracks.map(renderTrackItem)
+            )
+          ) : categories.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              No categories found. Tap + to add one.
             </Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+          ) : (
+            categories.map(renderCategoryItem)
+          )}
+        </ScrollView>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {viewMode === 'tracks' ? renderTrackModal() : renderCategoryModal()}
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-              onPress={
-                viewMode === 'tracks' ? handleSaveTrack : handleSaveCategory
-              }
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={colors.textLight} />
-              ) : (
-                <Text style={styles.saveButtonText}>
-                  {editingTrack || editingCategory ? 'Update' : 'Create'}
+        <Modal
+          visible={modalVisible}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            <SafeAreaView style={styles.modalSafeArea}>
+              <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {viewMode === 'tracks'
+                    ? editingTrack
+                      ? 'Edit Track'
+                      : 'Add New Track'
+                    : editingCategory
+                    ? 'Edit Category'
+                    : 'Add New Category'}
                 </Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                {viewMode === 'tracks' ? renderTrackModal() : renderCategoryModal()}
+
+                <TouchableOpacity
+                  style={[styles.saveButton, { backgroundColor: colors.primary }, saving && styles.saveButtonDisabled]}
+                  onPress={viewMode === 'tracks' ? handleSaveTrack : handleSaveCategory}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.textLight} />
+                  ) : (
+                    <Text style={[styles.saveButtonText, { color: colors.textLight }]}>
+                      {editingTrack || editingCategory ? 'Update' : 'Create'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -741,7 +731,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: colors.secondaryText,
   },
   header: {
     flexDirection: 'row',
@@ -749,28 +738,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
   },
   addButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -778,7 +762,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 20,
     marginBottom: 16,
-    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 4,
     shadowColor: '#000',
@@ -793,16 +776,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  toggleActive: {
-    backgroundColor: colors.primary,
-  },
+  toggleActive: (primaryColor: string) => ({
+    backgroundColor: primaryColor,
+  }),
   toggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.secondaryText,
-  },
-  toggleTextActive: {
-    color: colors.textLight,
   },
   scrollView: {
     flex: 1,
@@ -815,11 +794,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 50,
     fontSize: 16,
-    color: colors.secondaryText,
   },
   listItem: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -837,11 +813,9 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
   },
   itemMeta: {
     fontSize: 12,
-    color: colors.secondaryText,
     marginTop: 4,
   },
   itemActions: {
@@ -857,7 +831,9 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  modalSafeArea: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -865,14 +841,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
   },
   modalContent: {
     flex: 1,
@@ -883,9 +856,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 16,
     marginBottom: 24,
-    backgroundColor: colors.card,
     borderWidth: 2,
-    borderColor: colors.primary + '40',
     borderStyle: 'dashed',
     overflow: 'hidden',
   },
@@ -900,16 +871,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.primary + '10',
   },
   filePickerText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
   },
   filePickerSubtext: {
     fontSize: 12,
-    color: colors.secondaryText,
   },
   formGroup: {
     marginBottom: 20,
@@ -917,18 +885,15 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: colors.text,
+    // color diatur inline
   },
   textArea: {
     minHeight: 80,
@@ -938,15 +903,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
   },
   saveButton: {
-    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
@@ -959,6 +921,5 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.textLight,
   },
 });

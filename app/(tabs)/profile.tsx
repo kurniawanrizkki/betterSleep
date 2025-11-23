@@ -35,11 +35,7 @@ interface UserProfile {
   created_at: string;
 }
 
-const mockStats = {
-    totalGratitude: 42,
-    avgSleep: 7.5,
-    lastMeditated: "2 Hari Lalu",
-};
+// ✅ HAPUS mockStats
 
 export default function ProfileScreen() {
     const { user, signOut } = useAuth();
@@ -51,6 +47,13 @@ export default function ProfileScreen() {
     const [isEditing, setIsEditing] = useState(false);
     const [newFullName, setNewFullName] = useState('');
 
+    // ✅ State untuk statistik real
+    const [stats, setStats] = useState({
+        totalGratitude: 0,
+        avgSleep: 0,
+        lastMeditated: 'Tidak ada',
+    });
+
     const router = useRouter();
 
     const themeOptions: { label: string, value: ThemePreference, icon: string }[] = [
@@ -61,38 +64,93 @@ export default function ProfileScreen() {
 
     useEffect(() => {
         if (user) {
-            getProfile();
+            loadData();
         }
     }, [user]);
 
-    const getProfile = async () => {
+    const loadData = async () => {
         try {
             setLoading(true);
-            if (!user?.id) throw new Error('No user');
-            
-            const { data, error, status } = await supabase
-                .from('users')
-                .select(`id, email, full_name, avatar_url, created_at`)
-                .eq('id', user.id)
-                .single();
-
-            if (error && status !== 406) {
-                throw error;
-            }
-
-            if (data) {
-                setProfile(data);
-                setNewFullName(data.full_name || '');
-            }
+            await Promise.all([
+                getProfile(),
+                loadStats()
+            ]);
         } catch (error) {
-            if (error instanceof Error) {
-                Alert.alert('Error', error.message);
-            }
+            console.error('Error loading profile data:', error);
         } finally {
             setLoading(false);
         }
     };
-    
+
+    const getProfile = async () => {
+        if (!user?.id) return;
+        
+        const { data, error } = await supabase
+            .from('users')
+            .select(`id, email, full_name, avatar_url, created_at`)
+            .eq('id', user.id)
+            .single();
+
+        if (error) throw error;
+        if (data) {
+            setProfile(data);
+            setNewFullName(data.full_name || '');
+        }
+    };
+
+    // ✅ Ambil statistik real dari Supabase
+    const loadStats = async () => {
+        if (!user?.id) return;
+
+        try {
+            // 1. Total gratitude notes
+            const { count: totalGratitude } = await supabase
+                .from('gratitude_notes')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            // 2. Rata-rata tidur (7 hari terakhir)
+            const { data: sleepRecords } = await supabase
+                .from('sleep_records')
+                .select('hours')
+                .eq('user_id', user.id)
+                .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+                .limit(7);
+
+            const avgSleep = sleepRecords && sleepRecords.length > 0
+                ? (sleepRecords.reduce((sum, r) => sum + r.hours, 0) / sleepRecords.length)
+                : 0;
+
+            // 3. Musik terakhir diputar
+            const { data: lastMusic } = await supabase
+                .from('user_music_history')
+                .select('played_at')
+                .eq('user_id', user.id)
+                .order('played_at', { ascending: false })
+                .limit(1);
+
+            let lastMeditated = 'Tidak ada';
+            if (lastMusic && lastMusic.length > 0) {
+                const playedAt = new Date(lastMusic[0].played_at);
+                const now = new Date();
+                const diffInDays = Math.floor((now.getTime() - playedAt.getTime()) / (1000 * 60 * 60 * 24));
+                lastMeditated = diffInDays === 0 
+                    ? 'Hari ini' 
+                    : diffInDays === 1 
+                        ? 'Kemarin' 
+                        : `${diffInDays} Hari Lalu`;
+            }
+
+            setStats({
+                totalGratitude: totalGratitude || 0,
+                avgSleep: parseFloat(avgSleep.toFixed(1)),
+                lastMeditated,
+            });
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    };
+
     const updateProfile = async () => {
         if (!newFullName.trim()) {
             Alert.alert('Error', 'Nama lengkap tidak boleh kosong');
@@ -100,13 +158,12 @@ export default function ProfileScreen() {
         }
 
         try {
-            const updates = {
-                id: user?.id,
-                full_name: newFullName.trim(),
-                updated_at: new Date().toISOString(),
-            };
+            // ❗ Perbaiki: Simpan ke tabel `users`, bukan `profiles`
+            const { error } = await supabase
+                .from('users')
+                .update({ full_name: newFullName.trim() })
+                .eq('id', user?.id);
 
-            const { error } = await supabase.from('profiles').upsert(updates);
             if (error) throw error;
 
             Alert.alert('Berhasil', 'Profil berhasil diperbarui!');
@@ -133,15 +190,11 @@ export default function ProfileScreen() {
                 contentContainerStyle={styles.scrollContainer}
                 showsVerticalScrollIndicator={false}
             >
-                
                 {/* Profile Header */}
                 <View style={styles.profileHeader}>
-                    {/* Avatar */}
                     <View style={[styles.avatar, { backgroundColor: colors.primary + '20' }]}>
                         <User size={48} color={colors.primary} />
                     </View>
-                    
-                    {/* User Info */}
                     <View style={styles.userInfo}>
                         {isEditing ? (
                             <View style={styles.editInputContainer}>
@@ -186,21 +239,21 @@ export default function ProfileScreen() {
                         <StatCard 
                             icon={<Heart size={20} color={colors.textLight} />}
                             iconBg={colors.success}
-                            value={mockStats.totalGratitude.toString()}
+                            value={stats.totalGratitude.toString()}
                             label="Catatan Syukur"
                             colors={colors}
                         />
                         <StatCard 
                             icon={<Clock size={20} color={colors.textLight} />}
                             iconBg={colors.primary}
-                            value={`${mockStats.avgSleep} Jam`}
+                            value={`${stats.avgSleep} Jam`}
                             label="Tidur Rata-Rata"
                             colors={colors}
                         />
                         <StatCard 
                             icon={<Moon size={20} color={colors.textLight} />}
                             iconBg={colors.warning}
-                            value={mockStats.lastMeditated}
+                            value={stats.lastMeditated}
                             label="Meditasi Terakhir"
                             colors={colors}
                         />
@@ -244,13 +297,11 @@ export default function ProfileScreen() {
                         <Text style={[styles.logoutText, { color: colors.danger }]}>Keluar (Logout)</Text>
                     </TouchableOpacity>
                 </View>
-                
             </ScrollView>
         </SafeAreaView>
     );
 }
 
-// Component Card Stat
 const StatCard = ({ icon, iconBg, value, label, colors }: { 
     icon: JSX.Element, 
     iconBg: string, 
@@ -277,8 +328,6 @@ const profileStyles = (colors: AppColors) => StyleSheet.create({
         padding: 16,
         paddingBottom: 24,
     },
-    
-    // Profile Header
     profileHeader: {
         alignItems: 'center',
         marginBottom: 20,
@@ -343,8 +392,6 @@ const profileStyles = (colors: AppColors) => StyleSheet.create({
         padding: 8,
         borderRadius: 8,
     },
-    
-    // Section
     section: {
         marginBottom: 16,
         backgroundColor: colors.card,
@@ -363,8 +410,6 @@ const profileStyles = (colors: AppColors) => StyleSheet.create({
         marginBottom: 12,
         letterSpacing: 0.2,
     },
-    
-    // Stats
     statsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -400,8 +445,6 @@ const profileStyles = (colors: AppColors) => StyleSheet.create({
         fontWeight: '600',
         lineHeight: 13,
     },
-
-    // Theme Options
     themeOptionsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -433,8 +476,6 @@ const profileStyles = (colors: AppColors) => StyleSheet.create({
     themeOptionTextSelected: {
         color: colors.primary,
     },
-
-    // Actions
     actionsSection: {
         marginBottom: 8,
     },

@@ -146,31 +146,6 @@ const LoginScreen = () => {
                         <View style={styles.separator} />
                     </View>
 
-                    {/* Social Login */}
-                    <View style={styles.socialButtons}>
-                        <TouchableOpacity
-                            style={[styles.googleButton, loading && styles.socialButtonDisabled]}
-                            onPress={handleGoogleLogin}
-                            disabled={loading}
-                        >
-                            <View style={styles.googleIconContainer}>
-                                <Text style={styles.googleIcon}>G</Text>
-                            </View>
-                            <Text style={styles.googleButtonText}>Google</Text>
-                        </TouchableOpacity>
-
-                        {/* Apple Button (Teks disederhanakan) */}
-                        <TouchableOpacity
-                            style={[styles.appleButton, styles.socialButtonDisabled]}
-                            disabled={true} // Nonaktifkan Apple karena tidak diimplementasikan
-                        >
-                            <View style={styles.appleIconContainer}>
-                                <Text style={styles.appleIcon}></Text>
-                            </View>
-                            <Text style={styles.appleButtonText}>Apple</Text>
-                        </TouchableOpacity>
-                    </View>
-
                     {/* Register Link */}
                     <View style={styles.registerLinkContainer}>
                         <Text style={styles.registerText}>Belum punya akun?</Text>

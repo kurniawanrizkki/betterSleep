@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Lock, Mail, User } from 'lucide-react-native';
+import { Moon,Lock, Mail, User } from 'lucide-react-native';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,7 +69,7 @@ export default function RegisterScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
             {/* Ganti ikon default dengan ikon yang konsisten (contoh: User) */}
-            <User size={48} color={colors.primary} />
+            <Moon size={48} color={colors.primary} />
             <Text style={styles.title}>Daftar Akun Baru</Text>
             <Text style={styles.subtitle}>Buat akun Anda untuk memulai perjalanan menuju ketenangan.</Text>
         </View>

@@ -14,7 +14,9 @@ import {
   View,
   Platform,
 } from 'react-native';
+import { Linking } from 'expo-linking';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext'; // ✅
 import { sleepScheduleService } from '../services/sleepSchedule';
 import { notificationService } from '../services/notificationService';
 import { Database } from '../types/database.types';
@@ -22,18 +24,11 @@ import * as Notifications from 'expo-notifications';
 
 type SleepSchedule = Database['public']['Tables']['sleep_schedules']['Row'];
 
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  secondaryText: '#7F8C8D',
-  textLight: '#FFFFFF',
-  success: '#4CAF50',
-  warning: '#FFA726',
-};
-
 export default function SleepScheduleScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors, theme } = useTheme(); // ✅
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -47,6 +42,7 @@ export default function SleepScheduleScreen() {
     enabled: boolean;
     scheduled: number;
     message: string;
+    nextAlarm?: string;
   } | null>(null);
 
   const notificationListener = useRef<any>();
@@ -59,7 +55,6 @@ export default function SleepScheduleScreen() {
     }
 
     return () => {
-      // Cleanup listeners
       if (notificationListener.current) {
         notificationListener.current.remove();
       }
@@ -70,29 +65,18 @@ export default function SleepScheduleScreen() {
   }, [user]);
 
   const setupNotificationListeners = () => {
-    // Handle notifications received while app is in foreground
     notificationListener.current = notificationService.addNotificationReceivedListener(
       (notification) => {
         console.log('📬 Notification received (app in foreground)');
-        console.log('   Title:', notification.request.content.title);
-        console.log('   ID:', notification.request.identifier);
-        
-        // DON'T show anything in UI
-        // The system notification handler will decide what to show
-        // We just log it for debugging
       }
     );
 
-    // Handle user tapping on notification
     responseListener.current = notificationService.addNotificationResponseListener(
       (response) => {
         console.log('👆 User tapped notification');
-        
-        const data = response.notification.request.content.data;
-        
-        // Dismiss the notification
         Notifications.dismissNotificationAsync(response.notification.request.identifier);
         
+        const data = response.notification.request.content.data;
         if (data.type === 'sleep_reminder') {
           Alert.alert(
             '🌙 Pengingat Tidur',
@@ -124,7 +108,6 @@ export default function SleepScheduleScreen() {
         setReminderBefore(data.reminder_before);
       }
 
-      // Check notification status
       const status = await notificationService.checkNotificationStatus();
       setNotificationStatus(status);
     } catch (error: any) {
@@ -152,45 +135,30 @@ export default function SleepScheduleScreen() {
 
   const calculateAlarmTime = () => {
     const [bedHour, bedMin] = bedtime.split(':').map(Number);
-    
     let bedtimeMinutes = bedHour * 60 + bedMin;
     let alarmMinutes = bedtimeMinutes - reminderBefore;
-    
-    if (alarmMinutes < 0) {
-      alarmMinutes += 24 * 60;
-    }
-    
+    if (alarmMinutes < 0) alarmMinutes += 24 * 60;
     const alarmHour = Math.floor(alarmMinutes / 60);
     const alarmMin = alarmMinutes % 60;
-    
     return `${alarmHour.toString().padStart(2, '0')}:${alarmMin.toString().padStart(2, '0')}`;
   };
 
   const getTimeUntilAlarm = () => {
     const [bedHour, bedMin] = bedtime.split(':').map(Number);
-    
     let bedtimeMinutes = bedHour * 60 + bedMin;
     let alarmMinutes = bedtimeMinutes - reminderBefore;
-    
-    if (alarmMinutes < 0) {
-      alarmMinutes += 24 * 60;
-    }
-    
+    if (alarmMinutes < 0) alarmMinutes += 24 * 60;
     const alarmHour = Math.floor(alarmMinutes / 60);
     const alarmMin = alarmMinutes % 60;
-    
     const now = new Date();
     const alarmTime = new Date();
     alarmTime.setHours(alarmHour, alarmMin, 0, 0);
-    
     if (alarmTime <= now) {
       alarmTime.setDate(alarmTime.getDate() + 1);
     }
-    
     const minutesUntil = Math.floor((alarmTime.getTime() - now.getTime()) / 1000 / 60);
     const hoursUntil = Math.floor(minutesUntil / 60);
     const minsUntil = minutesUntil % 60;
-    
     return {
       time: alarmTime,
       minutesUntil,
@@ -204,15 +172,12 @@ export default function SleepScheduleScreen() {
   const getSleepQuality = () => {
     const [bedHour, bedMin] = bedtime.split(':').map(Number);
     const [wakeHour, wakeMin] = wakeTime.split(':').map(Number);
-    
     let totalMinutes = (wakeHour * 60 + wakeMin) - (bedHour * 60 + bedMin);
     if (totalMinutes < 0) totalMinutes += 24 * 60;
-    
     const hours = totalMinutes / 60;
-    
     if (hours >= 7 && hours <= 9) return { text: 'Optimal', color: colors.success };
     if (hours >= 6 && hours < 7) return { text: 'Cukup Baik', color: colors.warning };
-    return { text: 'Perlu Perbaikan', color: '#EF5350' };
+    return { text: 'Perlu Perbaikan', color: colors.danger };
   };
 
   const timeOptions = [];
@@ -247,8 +212,6 @@ export default function SleepScheduleScreen() {
       }
 
       await loadSchedule();
-
-      // Show detailed confirmation
       const status = await notificationService.checkNotificationStatus();
       
       Alert.alert(
@@ -270,380 +233,412 @@ export default function SleepScheduleScreen() {
 
   const handleTestNotification = async () => {
     await notificationService.sendTestNotification();
-    
     Alert.alert(
       '✅ Test Alarm Dijadwalkan!',
-      'Alarm test telah dijadwalkan dan akan berbunyi dalam 10 detik.\n\n' +
-      '📱 Anda bisa:\n' +
-      '• Tetap di app ini\n' +
-      '• Minimize ke home screen\n' +
-      '• Buka app lain\n' +
-      '• Tutup app sepenuhnya\n\n' +
-      'Notifikasi akan muncul dalam 10 detik di mana pun Anda berada!',
+      'Alarm test telah dijadwalkan dan akan berbunyi dalam 10 detik...',
       [{ text: 'OK' }]
     );
   };
 
   const quality = getSleepQuality();
 
+  // ✅ Gradient header responsif
+  const headerGradient = theme === 'dark'
+    ? ['#1A2A3A', '#253746']
+    : ['#6B9DC3', '#8FB3D5'];
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LinearGradient
-          colors={['#6B9DC3', '#8FB3D5']}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <ChevronLeft size={24} color={colors.textLight} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Jadwal Tidur</Text>
-            <View style={styles.placeholder} />
-          </View>
-          <Text style={styles.headerSubtitle}>
-            Atur waktu tidur dan bangun yang konsisten 🌙
-          </Text>
-        </LinearGradient>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <SafeAreaView style={styles.container}>
+          <LinearGradient colors={headerGradient} style={styles.header}>
+            <View style={styles.headerContent}>
+              <TouchableOpacity 
+                style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => router.back()}
+              >
+                <ChevronLeft size={24} color={colors.textLight} />
+              </TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: colors.textLight }]}>Jadwal Tidur</Text>
+              <View style={styles.placeholder} />
+            </View>
+            <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>
+              Atur waktu tidur dan bangun yang konsisten 🌙
+            </Text>
+          </LinearGradient>
 
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat jadwal...</Text>
-        </View>
-      </SafeAreaView>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Memuat jadwal...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#6B9DC3', '#8FB3D5']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <ChevronLeft size={24} color={colors.textLight} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Jadwal Tidur</Text>
-          <View style={styles.headerButtons}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={headerGradient} style={styles.header}>
+          <View style={styles.headerContent}>
             <TouchableOpacity 
-              style={styles.testButton}
-              onPress={handleTestNotification}
+              style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+              onPress={() => router.back()}
             >
-              <TestTube size={20} color={colors.textLight} />
+              <ChevronLeft size={24} color={colors.textLight} />
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.testButton}
-              onPress={() => router.push('/debug-alarm' as any)}
-            >
-              <Text style={styles.debugText}>🔍</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <Text style={styles.headerSubtitle}>
-          Atur waktu tidur dan bangun yang konsisten 🌙
-        </Text>
-      </LinearGradient>
-
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Notification Status Card */}
-        {notificationStatus && (
-          <View style={[
-            styles.statusCard,
-            { 
-              backgroundColor: notificationStatus.enabled 
-                ? (notificationStatus.scheduled > 0 ? '#E8F5E9' : '#FFF3E0')
-                : '#FFEBEE' 
-            }
-          ]}>
-            <Text style={styles.statusTitle}>
-              {notificationStatus.enabled 
-                ? (notificationStatus.scheduled > 0 ? '✅ Alarm Aktif' : '⚠️ Belum Ada Alarm')
-                : '❌ Izin Notifikasi Belum Diberikan'
-              }
-            </Text>
-            <Text style={styles.statusMessage}>
-              {notificationStatus.message}
-            </Text>
-            {notificationStatus.nextAlarm && (
-              <Text style={styles.statusNextAlarm}>
-                🔔 Alarm berikutnya: {notificationStatus.nextAlarm}
-              </Text>
-            )}
-            {!notificationStatus.enabled && (
+            <Text style={[styles.headerTitle, { color: colors.textLight }]}>Jadwal Tidur</Text>
+            <View style={styles.headerButtons}>
               <TouchableOpacity 
-                style={styles.statusButton}
-                onPress={() => Linking.openSettings()}
+                style={[styles.testButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={handleTestNotification}
               >
-                <Text style={styles.statusButtonText}>Buka Pengaturan</Text>
+                <TestTube size={20} color={colors.textLight} />
               </TouchableOpacity>
-            )}
+              <TouchableOpacity 
+                style={[styles.testButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => router.push('/debug-alarm' as any)}
+              >
+                <Text style={styles.debugText}>🔍</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
+          <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>
+            Atur waktu tidur dan bangun yang konsisten 🌙
+          </Text>
+        </LinearGradient>
 
-        {/* Alarm Preview Card */}
-        {reminderEnabled && (
-          <View style={styles.alarmPreviewCard}>
-            <Text style={styles.alarmPreviewTitle}>⏰ Preview Alarm</Text>
-            <View style={styles.alarmPreviewContent}>
-              <Text style={styles.alarmPreviewLabel}>Alarm akan berbunyi:</Text>
-              <Text style={styles.alarmPreviewTime}>{calculateAlarmTime()}</Text>
-              <Text style={styles.alarmPreviewCountdown}>
-                {(() => {
-                  const info = getTimeUntilAlarm();
-                  return info.isPast 
-                    ? '⚠️ Waktu sudah lewat! Pilih waktu yang lebih lama.'
-                    : `📍 ${info.text}`;
-                })()}
+        <ScrollView 
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {notificationStatus && (
+            <View style={[
+              styles.statusCard,
+              { 
+                backgroundColor: notificationStatus.enabled 
+                  ? (notificationStatus.scheduled > 0 ? colors.success + '20' : colors.warning + '20')
+                  : colors.danger + '20',
+                borderLeftColor: notificationStatus.enabled 
+                  ? (notificationStatus.scheduled > 0 ? colors.success : colors.warning)
+                  : colors.danger,
+              }
+            ]}>
+              <Text style={[styles.statusTitle, { color: colors.text }]}>
+                {notificationStatus.enabled 
+                  ? (notificationStatus.scheduled > 0 ? '✅ Alarm Aktif' : '⚠️ Belum Ada Alarm')
+                  : '❌ Izin Notifikasi Belum Diberikan'
+                }
               </Text>
-              <Text style={styles.alarmPreviewDetail}>
-                ({reminderBefore} menit sebelum tidur pukul {bedtime})
+              <Text style={[styles.statusMessage, { color: colors.text }]}>
+                {notificationStatus.message}
               </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Sleep Duration Card */}
-        <View style={styles.durationCard}>
-          <Text style={styles.durationLabel}>Durasi Tidur</Text>
-          <Text style={styles.durationValue}>{calculateSleepDuration()}</Text>
-          <View style={styles.qualityBadge}>
-            <View style={[styles.qualityDot, { backgroundColor: quality.color }]} />
-            <Text style={[styles.qualityText, { color: quality.color }]}>
-              {quality.text}
-            </Text>
-          </View>
-        </View>
-
-        {/* Bedtime Setting */}
-        <View style={styles.timeCard}>
-          <View style={styles.timeCardHeader}>
-            <View style={styles.timeIcon}>
-              <Moon size={24} color={colors.primary} />
-            </View>
-            <View style={styles.timeInfo}>
-              <Text style={styles.timeLabel}>Waktu Tidur</Text>
-              <Text style={styles.timeDescription}>Atur jam tidur ideal Anda</Text>
-            </View>
-          </View>
-          <View style={styles.timePicker}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.timePickerContent}
-            >
-              {timeOptions.map((time) => (
-                <TouchableOpacity
-                  key={time}
-                  style={[
-                    styles.timeOption,
-                    bedtime === time && styles.timeOptionSelected
-                  ]}
-                  onPress={() => setBedtime(time)}
+              {notificationStatus.nextAlarm && (
+                <Text style={[styles.statusNextAlarm, { color: colors.text }]}>
+                  🔔 Alarm berikutnya: {notificationStatus.nextAlarm}
+                </Text>
+              )}
+              {!notificationStatus.enabled && (
+                <TouchableOpacity 
+                  style={[styles.statusButton, { backgroundColor: colors.primary }]}
+                  onPress={() => Linking.openSettings()}
                 >
-                  <Text style={[
-                    styles.timeOptionText,
-                    bedtime === time && styles.timeOptionTextSelected
-                  ]}>
-                    {time}
-                  </Text>
+                  <Text style={[styles.statusButtonText, { color: colors.textLight }]}>Buka Pengaturan</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-
-        {/* Wake Time Setting */}
-        <View style={styles.timeCard}>
-          <View style={styles.timeCardHeader}>
-            <View style={[styles.timeIcon, { backgroundColor: '#FFF9E6' }]}>
-              <Sun size={24} color="#FFA726" />
+              )}
             </View>
-            <View style={styles.timeInfo}>
-              <Text style={styles.timeLabel}>Waktu Bangun</Text>
-              <Text style={styles.timeDescription}>Atur jam bangun ideal Anda</Text>
-            </View>
-          </View>
-          <View style={styles.timePicker}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.timePickerContent}
-            >
-              {timeOptions.map((time) => (
-                <TouchableOpacity
-                  key={time}
-                  style={[
-                    styles.timeOption,
-                    wakeTime === time && styles.timeOptionSelected
-                  ]}
-                  onPress={() => setWakeTime(time)}
-                >
-                  <Text style={[
-                    styles.timeOptionText,
-                    wakeTime === time && styles.timeOptionTextSelected
-                  ]}>
-                    {time}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-
-        {/* Reminder Settings */}
-        <View style={styles.reminderCard}>
-          <View style={styles.reminderHeader}>
-            <Bell size={20} color={colors.primary} />
-            <Text style={styles.reminderTitle}>Pengingat Tidur (Alarm)</Text>
-          </View>
-          
-          <View style={styles.reminderOption}>
-            <Text style={styles.reminderOptionLabel}>Aktifkan Pengingat</Text>
-            <Switch
-              value={reminderEnabled}
-              onValueChange={setReminderEnabled}
-              trackColor={{ false: '#D1D5DB', true: colors.primary }}
-              thumbColor={colors.textLight}
-            />
-          </View>
+          )}
 
           {reminderEnabled && (
-            <>
-              <View style={styles.reminderOption}>
-                <Text style={styles.reminderOptionLabel}>Ingatkan Sebelum</Text>
-                <View style={styles.reminderTimeButtons}>
-                  {[15, 30, 60].map((min) => (
-                    <TouchableOpacity
-                      key={min}
-                      style={[
-                        styles.reminderTimeButton,
-                        reminderBefore === min && styles.reminderTimeButtonSelected
-                      ]}
-                      onPress={() => setReminderBefore(min)}
-                    >
-                      <Text style={[
-                        styles.reminderTimeButtonText,
-                        reminderBefore === min && styles.reminderTimeButtonTextSelected
-                      ]}>
-                        {min}m
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.reminderTypeSection}>
-                <Text style={styles.reminderTypeTitle}>Tipe Pengingat</Text>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.reminderTypeCard,
-                    reminderType === 'notification' && styles.reminderTypeCardSelected
-                  ]}
-                  onPress={() => setReminderType('notification')}
-                >
-                  <View style={styles.reminderTypeRadio}>
-                    {reminderType === 'notification' && (
-                      <View style={styles.reminderTypeRadioInner} />
-                    )}
-                  </View>
-                  <View style={styles.reminderTypeInfo}>
-                    <Text style={styles.reminderTypeLabel}>Notifikasi Biasa</Text>
-                    <Text style={styles.reminderTypeDesc}>
-                      Tampil di atas layar HP dengan suara
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.reminderTypeCard,
-                    reminderType === 'fullscreen' && styles.reminderTypeCardSelected
-                  ]}
-                  onPress={() => setReminderType('fullscreen')}
-                >
-                  <View style={styles.reminderTypeRadio}>
-                    {reminderType === 'fullscreen' && (
-                      <View style={styles.reminderTypeRadioInner} />
-                    )}
-                  </View>
-                  <View style={styles.reminderTypeInfo}>
-                    <Text style={styles.reminderTypeLabel}>Alarm Prioritas Tinggi</Text>
-                    <Text style={styles.reminderTypeDesc}>
-                      Suara lebih keras, vibrate kuat (Recommended)
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>
-                  ℹ️ Alarm akan berbunyi setiap hari pada waktu yang sama.{'\n\n'}
-                  📌 Pastikan:{'\n'}
-                  • Notifikasi BetterSleep diizinkan{'\n'}
-                  • Baterai tidak dalam mode hemat ekstrim{'\n'}
-                  • Aplikasi tidak di-force stop{'\n'}
-                  • Mode "Jangan Ganggu" dimatikan saat waktu alarm
+            <View style={[styles.alarmPreviewCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.alarmPreviewTitle, { color: colors.text }]}>⏰ Preview Alarm</Text>
+              <View style={styles.alarmPreviewContent}>
+                <Text style={[styles.alarmPreviewLabel, { color: colors.text }]}>Alarm akan berbunyi:</Text>
+                <Text style={[styles.alarmPreviewTime, { color: colors.primary }]}>
+                  {calculateAlarmTime()}
+                </Text>
+                <Text style={[
+                  styles.alarmPreviewCountdown,
+                  { 
+                    color: (() => {
+                      const info = getTimeUntilAlarm();
+                      return info.isPast ? colors.danger : colors.secondaryText;
+                    })()
+                  }
+                ]}>
+                  {(() => {
+                    const info = getTimeUntilAlarm();
+                    return info.isPast 
+                      ? '⚠️ Waktu sudah lewat! Pilih waktu yang lebih lama.'
+                      : `📍 ${info.text}`;
+                  })()}
+                </Text>
+                <Text style={[styles.alarmPreviewDetail, { color: colors.secondaryText }]}>
+                  ({reminderBefore} menit sebelum tidur pukul {bedtime})
                 </Text>
               </View>
-            </>
+            </View>
           )}
-        </View>
 
-        {/* Save Button */}
-        <TouchableOpacity 
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSaveSchedule}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color={colors.textLight} size="small" />
-          ) : (
-            <Text style={styles.saveButtonText}>Simpan Jadwal & Aktifkan Alarm</Text>
-          )}
-        </TouchableOpacity>
+          <View style={[styles.durationCard, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.durationLabel, { color: colors.textLight }]}>Durasi Tidur</Text>
+            <Text style={[styles.durationValue, { color: colors.textLight }]}>
+              {calculateSleepDuration()}
+            </Text>
+            <View style={styles.qualityBadge}>
+              <View style={[styles.qualityDot, { backgroundColor: quality.color }]} />
+              <Text style={[styles.qualityText, { color: quality.color }]}>
+                {quality.text}
+              </Text>
+            </View>
+          </View>
 
-        {/* Tips */}
-        <View style={styles.tipsCard}>
-          <Text style={styles.tipsTitle}>💡 Cara Kerja Alarm</Text>
-          <Text style={styles.tipsText}>
-            <Text style={{fontWeight: 'bold'}}>✅ Alarm Otomatis Aktif</Text>{'\n'}
-            Setelah disimpan, alarm sudah langsung aktif! Anda bisa:{'\n'}
-            • Tutup aplikasi{'\n'}
-            • Minimize ke background{'\n'}
-            • Restart HP{'\n'}
-            • Buka aplikasi lain{'\n\n'}
+          <View style={[styles.timeCard, { backgroundColor: colors.card }]}>
+            <View style={styles.timeCardHeader}>
+              <View style={[styles.timeIcon, { backgroundColor: colors.secondaryButton }]}>
+                <Moon size={24} color={colors.primary} />
+              </View>
+              <View style={styles.timeInfo}>
+                <Text style={[styles.timeLabel, { color: colors.text }]}>Waktu Tidur</Text>
+                <Text style={[styles.timeDescription, { color: colors.secondaryText }]}>
+                  Atur jam tidur ideal Anda
+                </Text>
+              </View>
+            </View>
+            <View style={styles.timePicker}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.timePickerContent}
+              >
+                {timeOptions.map((time) => (
+                  <TouchableOpacity
+                    key={time}
+                    style={[
+                      styles.timeOption,
+                      { backgroundColor: colors.inputBackground },
+                      bedtime === time && { backgroundColor: colors.primary }
+                    ]}
+                    onPress={() => setBedtime(time)}
+                  >
+                    <Text style={[
+                      styles.timeOptionText,
+                      { color: colors.text },
+                      bedtime === time && { color: colors.textLight }
+                    ]}>
+                      {time}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          <View style={[styles.timeCard, { backgroundColor: colors.card }]}>
+            <View style={styles.timeCardHeader}>
+              <View style={[styles.timeIcon, { backgroundColor: colors.warning + '20' }]}>
+                <Sun size={24} color={colors.warning} />
+              </View>
+              <View style={styles.timeInfo}>
+                <Text style={[styles.timeLabel, { color: colors.text }]}>Waktu Bangun</Text>
+                <Text style={[styles.timeDescription, { color: colors.secondaryText }]}>
+                  Atur jam bangun ideal Anda
+                </Text>
+              </View>
+            </View>
+            <View style={styles.timePicker}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.timePickerContent}
+              >
+                {timeOptions.map((time) => (
+                  <TouchableOpacity
+                    key={time}
+                    style={[
+                      styles.timeOption,
+                      { backgroundColor: colors.inputBackground },
+                      wakeTime === time && { backgroundColor: colors.warning }
+                    ]}
+                    onPress={() => setWakeTime(time)}
+                  >
+                    <Text style={[
+                      styles.timeOptionText,
+                      { color: colors.text },
+                      wakeTime === time && { color: colors.textLight }
+                    ]}>
+                      {time}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          <View style={[styles.reminderCard, { backgroundColor: colors.card }]}>
+            <View style={styles.reminderHeader}>
+              <Bell size={20} color={colors.primary} />
+              <Text style={[styles.reminderTitle, { color: colors.text }]}>Pengingat Tidur (Alarm)</Text>
+            </View>
             
-            <Text style={{fontWeight: 'bold'}}>🔔 Kapan Alarm Berbunyi?</Text>{'\n'}
-            Alarm akan otomatis berbunyi sesuai waktu yang Anda set, bahkan kalau:{'\n'}
-            • Aplikasi tertutup{'\n'}
-            • HP dalam mode silent (tergantung pengaturan){'\n'}
-            • Anda sedang pakai aplikasi lain{'\n\n'}
-            
-            <Text style={{fontWeight: 'bold'}}>⚠️ Yang TIDAK Boleh:</Text>{'\n'}
-            • Force stop aplikasi dari pengaturan{'\n'}
-            • Hapus aplikasi dari RAM secara paksa{'\n'}
-            • Aktifkan Battery Saver yang agresif
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+            <View style={styles.reminderOption}>
+              <Text style={[styles.reminderOptionLabel, { color: colors.text }]}>Aktifkan Pengingat</Text>
+              <Switch
+                value={reminderEnabled}
+                onValueChange={setReminderEnabled}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.textLight}
+              />
+            </View>
+
+            {reminderEnabled && (
+              <>
+                <View style={styles.reminderOption}>
+                  <Text style={[styles.reminderOptionLabel, { color: colors.text }]}>Ingatkan Sebelum</Text>
+                  <View style={styles.reminderTimeButtons}>
+                    {[15, 30, 60].map((min) => (
+                      <TouchableOpacity
+                        key={min}
+                        style={[
+                          styles.reminderTimeButton,
+                          { backgroundColor: colors.inputBackground },
+                          reminderBefore === min && { backgroundColor: colors.primary }
+                        ]}
+                        onPress={() => setReminderBefore(min)}
+                      >
+                        <Text style={[
+                          styles.reminderTimeButtonText,
+                          { color: colors.text },
+                          reminderBefore === min && { color: colors.textLight }
+                        ]}>
+                          {min}m
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.reminderTypeSection}>
+                  <Text style={[styles.reminderTypeTitle, { color: colors.text }]}>Tipe Pengingat</Text>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.reminderTypeCard,
+                      { backgroundColor: colors.inputBackground },
+                      reminderType === 'notification' && { 
+                        backgroundColor: colors.secondaryButton,
+                        borderWidth: 2,
+                        borderColor: colors.primary
+                      }
+                    ]}
+                    onPress={() => setReminderType('notification')}
+                  >
+                    <View style={[styles.reminderTypeRadio, { borderColor: colors.primary }]}>
+                      {reminderType === 'notification' && (
+                        <View style={[styles.reminderTypeRadioInner, { backgroundColor: colors.primary }]} />
+                      )}
+                    </View>
+                    <View style={styles.reminderTypeInfo}>
+                      <Text style={[styles.reminderTypeLabel, { color: colors.text }]}>Notifikasi Biasa</Text>
+                      <Text style={[styles.reminderTypeDesc, { color: colors.secondaryText }]}>
+                        Tampil di atas layar HP dengan suara
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.reminderTypeCard,
+                      { backgroundColor: colors.inputBackground },
+                      reminderType === 'fullscreen' && { 
+                        backgroundColor: colors.secondaryButton,
+                        borderWidth: 2,
+                        borderColor: colors.primary
+                      }
+                    ]}
+                    onPress={() => setReminderType('fullscreen')}
+                  >
+                    <View style={[styles.reminderTypeRadio, { borderColor: colors.primary }]}>
+                      {reminderType === 'fullscreen' && (
+                        <View style={[styles.reminderTypeRadioInner, { backgroundColor: colors.primary }]} />
+                      )}
+                    </View>
+                    <View style={styles.reminderTypeInfo}>
+                      <Text style={[styles.reminderTypeLabel, { color: colors.text }]}>Alarm Prioritas Tinggi</Text>
+                      <Text style={[styles.reminderTypeDesc, { color: colors.secondaryText }]}>
+                        Suara lebih keras, vibrate kuat (Recommended)
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.infoBox, { backgroundColor: theme === 'dark' ? colors.primary + '20' : '#E3F2FD' }]}>
+                  <Text style={[styles.infoText, { color: colors.text }]}>
+                    ℹ️ Alarm akan berbunyi setiap hari pada waktu yang sama.{'\n\n'}
+                    📌 Pastikan:{'\n'}
+                    • Notifikasi diizinkan{'\n'}
+                    • Baterai tidak dalam mode hemat ekstrim{'\n'}
+                    • Aplikasi tidak di-force stop{'\n'}
+                    • Mode "Jangan Ganggu" dimatikan saat waktu alarm
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.saveButton, { backgroundColor: colors.primary }, saving && styles.saveButtonDisabled]}
+            onPress={handleSaveSchedule}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.textLight} size="small" />
+            ) : (
+              <Text style={[styles.saveButtonText, { color: colors.textLight }]}>
+                Simpan Jadwal & Aktifkan Alarm
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={[
+            styles.tipsCard,
+            { 
+              backgroundColor: theme === 'dark' ? colors.warning + '20' : '#FFF9E6',
+              borderLeftColor: colors.warning
+            }
+          ]}>
+            <Text style={[styles.tipsTitle, { color: colors.text }]}>💡 Cara Kerja Alarm</Text>
+            <Text style={[styles.tipsText, { color: colors.text }]}>
+              <Text style={{fontWeight: 'bold'}}>✅ Alarm Otomatis Aktif</Text>{'\n'}
+              Setelah disimpan, alarm sudah langsung aktif! Anda bisa:{'\n'}
+              • Tutup aplikasi{'\n'}
+              • Minimize ke background{'\n'}
+              • Restart HP{'\n'}
+              • Buka aplikasi lain{'\n\n'}
+              
+              <Text style={{fontWeight: 'bold'}}>🔔 Kapan Alarm Berbunyi?</Text>{'\n'}
+              Alarm akan otomatis berbunyi sesuai waktu yang Anda set, bahkan kalau:{'\n'}
+              • Aplikasi tertutup{'\n'}
+              • HP dalam mode silent (tergantung pengaturan){'\n'}
+              • Anda sedang pakai aplikasi lain{'\n\n'}
+              
+              <Text style={{fontWeight: 'bold'}}>⚠️ Yang TIDAK Boleh:</Text>{'\n'}
+              • Force stop aplikasi dari pengaturan{'\n'}
+              • Hapus aplikasi dari RAM secara paksa{'\n'}
+              • Aktifkan Battery Saver yang agresif
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F9FC',
   },
   header: {
     paddingTop: 50,
@@ -660,7 +655,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -668,7 +662,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -682,14 +675,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.textLight,
   },
   placeholder: {
     width: 40,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: colors.textLight,
     textAlign: 'center',
     opacity: 0.9,
   },
@@ -698,10 +689,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    paddingTop: 100,
   },
   loadingText: {
     fontSize: 16,
-    color: colors.secondaryText,
     fontWeight: '500',
   },
   content: {
@@ -709,12 +700,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   durationCard: {
-    backgroundColor: colors.primary,
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: colors.primary,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -722,20 +712,17 @@ const styles = StyleSheet.create({
   },
   durationLabel: {
     fontSize: 14,
-    color: colors.textLight,
     opacity: 0.9,
     marginBottom: 8,
   },
   durationValue: {
     fontSize: 32,
     fontWeight: '800',
-    color: colors.textLight,
     marginBottom: 12,
   },
   qualityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.textLight,
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
@@ -751,7 +738,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   timeCard: {
-    backgroundColor: '#FFF',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
@@ -770,7 +756,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E8F4F8',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -781,12 +766,10 @@ const styles = StyleSheet.create({
   timeLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 2,
   },
   timeDescription: {
     fontSize: 13,
-    color: colors.secondaryText,
   },
   timePicker: {
     marginTop: 12,
@@ -799,21 +782,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-  },
-  timeOptionSelected: {
-    backgroundColor: colors.primary,
   },
   timeOptionText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
-  },
-  timeOptionTextSelected: {
-    color: colors.textLight,
   },
   reminderCard: {
-    backgroundColor: '#FFF',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
@@ -832,7 +806,6 @@ const styles = StyleSheet.create({
   reminderTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
   },
   reminderOption: {
     flexDirection: 'row',
@@ -844,7 +817,6 @@ const styles = StyleSheet.create({
   },
   reminderOptionLabel: {
     fontSize: 15,
-    color: colors.text,
     fontWeight: '600',
   },
   reminderTimeButtons: {
@@ -855,18 +827,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#F5F5F5',
-  },
-  reminderTimeButtonSelected: {
-    backgroundColor: colors.primary,
   },
   reminderTimeButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
-  },
-  reminderTimeButtonTextSelected: {
-    color: colors.textLight,
   },
   reminderTypeSection: {
     marginTop: 16,
@@ -874,7 +838,6 @@ const styles = StyleSheet.create({
   reminderTypeTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 12,
   },
   reminderTypeCard: {
@@ -882,20 +845,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    backgroundColor: '#F5F5F5',
     marginBottom: 10,
-  },
-  reminderTypeCardSelected: {
-    backgroundColor: '#E8F4F8',
-    borderWidth: 2,
-    borderColor: colors.primary,
   },
   reminderTypeRadio: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -904,7 +860,6 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: colors.primary,
   },
   reminderTypeInfo: {
     flex: 1,
@@ -912,31 +867,26 @@ const styles = StyleSheet.create({
   reminderTypeLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: 2,
   },
   reminderTypeDesc: {
     fontSize: 13,
-    color: colors.secondaryText,
   },
   infoBox: {
-    backgroundColor: '#E3F2FD',
     borderRadius: 12,
     padding: 12,
     marginTop: 12,
   },
   infoText: {
     fontSize: 13,
-    color: colors.text,
     lineHeight: 18,
   },
   saveButton: {
-    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: colors.primary,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -948,62 +898,80 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.textLight,
   },
   tipsCard: {
-    backgroundColor: '#FFF9E6',
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: colors.warning,
   },
   tipsTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 12,
   },
   tipsText: {
     fontSize: 14,
-    color: colors.text,
     lineHeight: 22,
+  },
+  alarmPreviewCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  alarmPreviewTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  alarmPreviewContent: {
+    gap: 8,
+  },
+  alarmPreviewLabel: {
+    fontSize: 14,
+  },
+  alarmPreviewTime: {
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  alarmPreviewCountdown: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  alarmPreviewDetail: {
+    fontSize: 12,
+    opacity: 0.8,
   },
   statusCard: {
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
   },
   statusTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 8,
   },
   statusMessage: {
     fontSize: 14,
-    color: colors.text,
-    marginBottom: 12,
     lineHeight: 20,
   },
   statusNextAlarm: {
     fontSize: 13,
-    color: colors.text,
     fontWeight: '600',
     marginTop: 4,
     marginBottom: 12,
   },
   statusButton: {
-    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
     alignSelf: 'flex-start',
   },
   statusButtonText: {
-    color: colors.textLight,
     fontWeight: '600',
     fontSize: 14,
   },

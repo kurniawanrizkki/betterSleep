@@ -16,20 +16,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Plus, Edit, Trash2, Star, Upload, X } from 'lucide-react-native';
-import { productsService, Product } from '../../services/products'; // Correct import path
+import { useTheme } from '../../contexts/ThemeContext'; // ✅
+import { productsService, Product } from '../../services/products';
 import * as ImagePicker from 'expo-image-picker';
-
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  textLight: '#FFFFFF',
-  secondaryText: '#7F8C8D',
-  background: '#F5F9FC',
-  card: '#FFFFFF',
-  success: '#4CAF50',
-  warning: '#FFA726',
-  danger: '#EF5350',
-};
 
 interface ProductForm {
   name: string;
@@ -45,6 +34,8 @@ interface ProductForm {
 
 export default function AdminProductsScreen() {
   const router = useRouter();
+  const { colors } = useTheme(); // ✅
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,8 +71,7 @@ export default function AdminProductsScreen() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      // NOTE: Using getAllAdmin to show all products (active/inactive) in admin view
-      const data = await productsService.getAllAdmin(); 
+      const data = await productsService.getAllAdmin();
       setProducts(data);
     } catch (error: any) {
       console.error('Error loading products:', error);
@@ -134,7 +124,7 @@ export default function AdminProductsScreen() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images', // Retain string fix for previous TypeError
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -150,12 +140,10 @@ export default function AdminProductsScreen() {
   };
 
   const handleSave = async () => {
-    // Validation
     if (!form.name.trim()) {
       Alert.alert('Validation', 'Product name is required');
       return;
     }
-
     if (!form.price || isNaN(parseFloat(form.price))) {
       Alert.alert('Validation', 'Valid price is required');
       return;
@@ -178,31 +166,23 @@ export default function AdminProductsScreen() {
       let product: Product;
 
       if (editingProduct) {
-        // Update existing product
-        product = await productsService.update(editingProduct.id, productData); 
+        product = await productsService.update(editingProduct.id, productData);
         Alert.alert('Success', 'Product updated successfully');
       } else {
-        // Create new product
-        product = await productsService.create(productData); 
+        product = await productsService.create(productData);
         Alert.alert('Success', 'Product created successfully');
       }
-      
+
       const productId = product.id;
 
-      // Upload image if selected and different from existing public URL
       if (imageUri && imageUri !== editingProduct?.public_image_url) {
         try {
-          // Check if it's a local file URI (e.g., from ImagePicker)
           if (imageUri.startsWith('file://') || imageUri.startsWith('content://')) {
-            // FIX: Pass the local URI directly to the service for ArrayBuffer upload
-            // This bypasses the problematic Blob creation in the local environment,
-            // which caused the "Property 'blob' doesn't exist" error.
-            await productsService.uploadProductImage(productId, imageUri); 
+            await productsService.uploadProductImage(productId, imageUri);
           }
         } catch (error) {
           console.error('Error uploading image:', error);
-          // Changed to Warning so successful product creation isn't overshadowed
-          Alert.alert('Warning', 'Product saved but image upload failed'); 
+          Alert.alert('Warning', 'Product saved but image upload failed');
         }
       }
 
@@ -227,7 +207,7 @@ export default function AdminProductsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await productsService.delete(product.id); 
+              await productsService.delete(product.id);
               Alert.alert('Success', 'Product deleted');
               loadProducts();
             } catch (error: any) {
@@ -241,7 +221,7 @@ export default function AdminProductsScreen() {
   };
 
   const renderProduct = (product: Product) => (
-    <View key={product.id} style={styles.productCard}>
+    <View key={product.id} style={[styles.productCard, { backgroundColor: colors.card }]}>
       {product.public_image_url ? (
         <Image
           source={{ uri: product.public_image_url }}
@@ -249,29 +229,29 @@ export default function AdminProductsScreen() {
           resizeMode="cover"
         />
       ) : (
-        <View style={styles.productImagePlaceholder}>
-          <Text>No Image</Text>
+        <View style={[styles.productImagePlaceholder, { backgroundColor: colors.background }]}>
+          <Text style={{ color: colors.secondaryText }}>No Image</Text>
         </View>
       )}
 
       <View style={styles.productInfo}>
         <View style={styles.productHeader}>
-          <Text style={styles.productName} numberOfLines={2}>
+          <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
             {product.name}
           </Text>
           {product.is_featured && (
-            <View style={styles.featuredBadge}>
+            <View style={[styles.featuredBadge, { backgroundColor: colors.warning + '20' }]}>
               <Star size={12} color={colors.warning} fill={colors.warning} />
             </View>
           )}
         </View>
 
-        <Text style={styles.productPrice}>
+        <Text style={[styles.productPrice, { color: colors.primary }]}>
           {productsService.formatPrice(product.price)}
         </Text>
 
         <View style={styles.productMeta}>
-          <Text style={styles.productMetaText}>
+          <Text style={[styles.productMetaText, { color: colors.secondaryText }]}>
             ⭐ {product.rating} • {productsService.formatSoldCount(product.sold_count)} sold
           </Text>
           <Text
@@ -290,7 +270,7 @@ export default function AdminProductsScreen() {
             onPress={() => openEditModal(product)}
           >
             <Edit size={16} color={colors.textLight} />
-            <Text style={styles.actionButtonText}>Edit</Text>
+            <Text style={[styles.actionButtonText, { color: colors.textLight }]}>Edit</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -298,7 +278,7 @@ export default function AdminProductsScreen() {
             onPress={() => handleDelete(product)}
           >
             <Trash2 size={16} color={colors.textLight} />
-            <Text style={styles.actionButtonText}>Delete</Text>
+            <Text style={[styles.actionButtonText, { color: colors.textLight }]}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -307,203 +287,220 @@ export default function AdminProductsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading products...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Loading products...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Products</Text>
-        <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-          <Plus size={24} color={colors.textLight} />
-        </TouchableOpacity>
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: colors.background }]} 
+            onPress={() => router.back()}
+          >
+            <ChevronLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Manage Products</Text>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: colors.primary }]} 
+            onPress={openAddModal}
+          >
+            <Plus size={24} color={colors.textLight} />
+          </TouchableOpacity>
+        </View>
 
-      {/* Products List */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        {products.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No products yet</Text>
-            <Text style={styles.emptyStateSubtext}>Tap + to add your first product</Text>
-          </View>
-        ) : (
-          products.map(renderProduct)
-        )}
-      </ScrollView>
-
-      {/* Add/Edit Modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {editingProduct ? 'Edit Product' : 'Add Product'}
-            </Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Image Picker */}
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-              ) : (
-                <View style={styles.imagePickerPlaceholder}>
-                  <Upload size={32} color={colors.secondaryText} />
-                  <Text style={styles.imagePickerText}>Tap to select image</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Form Fields */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Product Name *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.name}
-                onChangeText={(text) => setForm({ ...form, name: text })}
-                placeholder="Enter product name"
-                placeholderTextColor={colors.secondaryText}
-              />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          {products.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>No products yet</Text>
+              <Text style={[styles.emptyStateSubtext, { color: colors.secondaryText }]}>
+                Tap + to add your first product
+              </Text>
             </View>
+          ) : (
+            products.map(renderProduct)
+          )}
+        </ScrollView>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Description</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={form.description}
-                onChangeText={(text) => setForm({ ...form, description: text })}
-                placeholder="Enter product description"
-                placeholderTextColor={colors.secondaryText}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>Price (Rp) *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.price}
-                  onChangeText={(text) => setForm({ ...form, price: text })}
-                  placeholder="0"
-                  placeholderTextColor={colors.secondaryText}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.label}>Rating</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.rating}
-                  onChangeText={(text) => setForm({ ...form, rating: text })}
-                  placeholder="4.5"
-                  placeholderTextColor={colors.secondaryText}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Affiliate Link</Text>
-              <TextInput
-                style={styles.input}
-                value={form.affiliate_link}
-                onChangeText={(text) => setForm({ ...form, affiliate_link: text })}
-                placeholder="https://..."
-                placeholderTextColor={colors.secondaryText}
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Sold Count</Text>
-              <TextInput
-                style={styles.input}
-                value={form.sold_count}
-                onChangeText={(text) => setForm({ ...form, sold_count: text })}
-                placeholder="0"
-                placeholderTextColor={colors.secondaryText}
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Switches */}
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Featured Product</Text>
-              <Switch
-                value={form.is_featured}
-                onValueChange={(value) => setForm({ ...form, is_featured: value })}
-                trackColor={{ false: '#D1D5DB', true: colors.primary }}
-                thumbColor={colors.textLight}
-              />
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Active</Text>
-              <Switch
-                value={form.is_active}
-                onValueChange={(value) => setForm({ ...form, is_active: value })}
-                trackColor={{ false: '#D1D5DB', true: colors.success }}
-                thumbColor={colors.textLight}
-              />
-            </View>
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={colors.textLight} />
-              ) : (
-                <Text style={styles.saveButtonText}>
-                  {editingProduct ? 'Update Product' : 'Create Product'}
+        <Modal
+          visible={modalVisible}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            <SafeAreaView style={styles.modalSafeArea}>
+              <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {editingProduct ? 'Edit Product' : 'Add Product'}
                 </Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                <TouchableOpacity style={[styles.imagePicker, { borderColor: colors.primary + '40' }]} onPress={pickImage}>
+                  {imageUri ? (
+                    <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                  ) : (
+                    <View style={[styles.imagePickerPlaceholder, { backgroundColor: colors.card }]}>
+                      <Upload size={32} color={colors.secondaryText} />
+                      <Text style={[styles.imagePickerText, { color: colors.secondaryText }]}>
+                        Tap to select image
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text }]}>Product Name *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                    value={form.name}
+                    onChangeText={(text) => setForm({ ...form, name: text })}
+                    placeholder="Enter product name"
+                    placeholderTextColor={colors.secondaryText}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text }]}>Description</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.textArea,
+                      { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }
+                    ]}
+                    value={form.description}
+                    onChangeText={(text) => setForm({ ...form, description: text })}
+                    placeholder="Enter product description"
+                    placeholderTextColor={colors.secondaryText}
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={[styles.label, { color: colors.text }]}>Price (Rp) *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                      value={form.price}
+                      onChangeText={(text) => setForm({ ...form, price: text })}
+                      placeholder="0"
+                      placeholderTextColor={colors.secondaryText}
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={[styles.label, { color: colors.text }]}>Rating</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                      value={form.rating}
+                      onChangeText={(text) => setForm({ ...form, rating: text })}
+                      placeholder="4.5"
+                      placeholderTextColor={colors.secondaryText}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text }]}>Affiliate Link</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                    value={form.affiliate_link}
+                    onChangeText={(text) => setForm({ ...form, affiliate_link: text })}
+                    placeholder="https://..."
+                    placeholderTextColor={colors.secondaryText}
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text }]}>Sold Count</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                    value={form.sold_count}
+                    onChangeText={(text) => setForm({ ...form, sold_count: text })}
+                    placeholder="0"
+                    placeholderTextColor={colors.secondaryText}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={[styles.switchRow, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.label, { color: colors.text }]}>Featured Product</Text>
+                  <Switch
+                    value={form.is_featured}
+                    onValueChange={(value) => setForm({ ...form, is_featured: value })}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.textLight}
+                  />
+                </View>
+
+                <View style={[styles.switchRow, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.label, { color: colors.text }]}>Active</Text>
+                  <Switch
+                    value={form.is_active}
+                    onValueChange={(value) => setForm({ ...form, is_active: value })}
+                    trackColor={{ false: colors.border, true: colors.success }}
+                    thumbColor={colors.textLight}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.saveButton, { backgroundColor: colors.primary }, saving && styles.saveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.textLight} />
+                  ) : (
+                    <Text style={[styles.saveButtonText, { color: colors.textLight }]}>
+                      {editingProduct ? 'Update Product' : 'Create Product'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -513,7 +510,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: colors.secondaryText,
   },
   header: {
     flexDirection: 'row',
@@ -521,28 +517,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
   },
   addButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -561,15 +552,12 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: colors.secondaryText,
   },
   productCard: {
-    backgroundColor: colors.card,
     borderRadius: 20,
     marginBottom: 16,
     overflow: 'hidden',
@@ -582,12 +570,10 @@ const styles = StyleSheet.create({
   productImage: {
     width: '100%',
     height: 180,
-    backgroundColor: colors.background,
   },
   productImagePlaceholder: {
     width: '100%',
     height: 180,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -604,18 +590,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
     marginRight: 8,
   },
   featuredBadge: {
-    backgroundColor: colors.warning + '20',
     padding: 6,
     borderRadius: 8,
   },
   productPrice: {
     fontSize: 20,
     fontWeight: '800',
-    color: colors.primary,
     marginBottom: 8,
   },
   productMeta: {
@@ -626,7 +609,6 @@ const styles = StyleSheet.create({
   },
   productMetaText: {
     fontSize: 13,
-    color: colors.secondaryText,
   },
   productStatus: {
     fontSize: 12,
@@ -648,11 +630,12 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textLight,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  modalSafeArea: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -660,14 +643,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
   },
   modalContent: {
     flex: 1,
@@ -679,9 +659,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 24,
-    backgroundColor: colors.card,
     borderWidth: 2,
-    borderColor: colors.primary + '40',
     borderStyle: 'dashed',
   },
   imagePreview: {
@@ -696,7 +674,6 @@ const styles = StyleSheet.create({
   },
   imagePickerText: {
     fontSize: 14,
-    color: colors.secondaryText,
   },
   formGroup: {
     marginBottom: 20,
@@ -708,18 +685,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: colors.text,
   },
   textArea: {
     minHeight: 100,
@@ -729,13 +702,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
   },
   saveButton: {
-    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
@@ -748,6 +719,5 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.textLight,
   },
 });

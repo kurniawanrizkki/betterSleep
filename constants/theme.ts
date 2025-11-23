@@ -1,110 +1,69 @@
-import {
-  DarkTheme as RNDarkTheme,
-  DefaultTheme as RNDefaultTheme,
-  Theme as RNTheme,
-} from '@react-navigation/native';
+// constants/theme.ts
 
-// --- 1. Definisi Tipe Kustom ---
+import { DefaultTheme, Theme } from "@react-navigation/native";
 
-// Definisi Warna Kustom (Harus konsisten dengan semua komponen UI Anda)
-export interface AppColors {
-  primary: string;
-  secondary: string;
-  text: string;
-  secondaryText: string;
-  background: string;
-  card: string;
-  border: string;
-  notification: string;
-  textLight: string;
-  inputBackground: string;
-  danger: string;
-  success: string;
-  secondaryButton: string;
-}
-
-// Definisi Tema Aplikasi Kustom
-export interface AppTheme {
-  dark: boolean;
-  colors: AppColors;
-}
-
-
-// --- 2. Definisi Skema Warna Kustom ---
-
-const LightColors: AppColors = {
-  primary: '#5B9BD5',
-  secondary: '#8FBC8F',
-  text: '#2C3E50',
-  secondaryText: '#7F8C8D',
-  background: '#F8F8F8',
-  card: '#FFFFFF',
-  border: '#E0E0E0',
-  notification: '#F1C40F',
-  textLight: '#FFFFFF',
-  inputBackground: '#FFFFFF',
-  danger: '#EF5350',
-  success: '#4CAF50',
-  secondaryButton: '#F0F0F0',
+export const AppColors = {
+  light: {
+    primary: "#5B9BD5",
+    primaryDark: "#4A6FA5",
+    accent: "#8AACC8",
+    background: "#F7F9FC",
+    card: "#FFFFFF",
+    text: "#2C3E50",
+    secondaryText: "#7F8C8D",
+    textLight: "#FFFFFF",
+    border: "#E0E0E0",
+    inputBackground: "#F0F0F0",
+    success: "#4CAF50",
+    warning: "#FFA726",
+    danger: "#EF5350",
+    secondaryButton: "#E8F4F8",
+    dark: false,
+  },
+  dark: {
+    primary: "#5B9BD5",
+    primaryDark: "#4A6FA5",
+    accent: "#8AACC8",
+    background: "#121212",
+    card: "#1E1E1E",
+    text: "#E0E0E0",
+    secondaryText: "#A0A0A0",
+    textLight: "#FFFFFF",
+    border: "#333333",
+    inputBackground: "#262626",
+    success: "#66BB6A",
+    warning: "#FFB74D",
+    danger: "#EF5350",
+    secondaryButton: "#2E2E2E",
+    dark: true,
+  },
 };
 
-const DarkColors: AppColors = {
-  primary: '#7BA5C9',
-  secondary: '#A8D8A8',
-  text: '#FFFFFF',
-  secondaryText: '#BDC3C7',
-  background: '#121212',
-  card: '#1E1E1E',
-  border: '#333333',
-  notification: '#F39C12',
-  textLight: '#FFFFFF',
-  inputBackground: '#282828',
-  danger: '#F44336',
-  success: '#66BB6A',
-  secondaryButton: '#333333',
-};
+// Ambil font dari tema default React Navigation agar tidak undefined
+const defaultFonts = DefaultTheme.fonts;
 
-// --- 3. Definisi Tema Aplikasi (Digunakan oleh useTheme) ---
-export const LightTheme: AppTheme = {
+export const AppNavigationLightTheme: Theme = {
   dark: false,
-  colors: LightColors,
+  colors: {
+    primary: AppColors.light.primary,
+    background: AppColors.light.background,
+    card: AppColors.light.card,
+    text: AppColors.light.text,
+    border: AppColors.light.border,
+    notification: AppColors.light.danger,
+  },
+  fonts: defaultFonts, // ✅ Ini mencegah error 'regular' of undefined
 };
 
-export const DarkTheme: AppTheme = {
+export const AppNavigationDarkTheme: Theme = {
   dark: true,
-  colors: DarkColors,
-};
-
-// --- 4. Definisi TEMA NAVIGASI (Digunakan oleh NavThemeProvider) ---
-// **INI ADALAH BAGIAN KRITIS UNTUK MEMPERBAIKI ERROR 'regular' of undefined**
-
-// Kita perpanjang (spread) tema default React Navigation untuk memastikan properti
-// internal yang dibutuhkan oleh native-stack (seperti konfigurasi font) tetap ada.
-
-export const NavigationLightTheme: RNTheme = {
-  ...RNDefaultTheme, // <-- MENGAMBIL SEMUA PROPERTI STANDAR RNDefaultTheme
   colors: {
-    ...RNDefaultTheme.colors, // Mengambil properti warna standar
-    // Menimpa properti warna yang Anda kelola
-    primary: LightColors.primary,
-    background: LightColors.background,
-    card: LightColors.card,
-    text: LightColors.text,
-    border: LightColors.border,
-    notification: LightColors.notification,
+    primary: AppColors.dark.primary,
+    background: AppColors.dark.background,
+    card: AppColors.dark.card,
+    text: AppColors.dark.text,
+    border: AppColors.dark.border,
+    notification: AppColors.dark.danger,
   },
-};
-
-export const NavigationDarkTheme: RNTheme = {
-  ...RNDarkTheme, // <-- MENGAMBIL SEMUA PROPERTI STANDAR RNDarkTheme
-  colors: {
-    ...RNDarkTheme.colors, // Mengambil properti warna standar
-    // Menimpa properti warna yang Anda kelola
-    primary: DarkColors.primary,
-    background: DarkColors.background,
-    card: DarkColors.card,
-    text: DarkColors.text,
-    border: DarkColors.border,
-    notification: DarkColors.notification,
-  },
+  fonts: defaultFonts, // ✅ Ini mencegah error 'regular' of undefined
 };

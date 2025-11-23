@@ -2,37 +2,31 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Pause, Play, Heart } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    ActivityIndicator,
-    RefreshControl,
-    Alert,
-    Dimensions,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Dimensions,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { musicService, MusicCategoryWithTracks, MusicTrack } from '../services/music';
-
-const colors = {
-  primary: '#5B9BD5',
-  text: '#2C3E50',
-  secondaryText: '#7F8C8D',
-  textLight: '#FFFFFF',
-  danger: '#EF5350',
-};
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function MusicRelaxationScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  
+  const { colors, theme } = useTheme();
+
   const [categories, setCategories] = useState<MusicCategoryWithTracks[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,33 +40,47 @@ export default function MusicRelaxationScreen() {
   const [isSeeking, setIsSeeking] = useState(false);
 
   useEffect(() => {
-    // Configure audio mode
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-    });
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          // iOS
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_DUCK,
+          // Android
+          staysActiveInBackground: true,
+          playsThroughEarpieceAndroid: false,
+          interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_DUCK,
+          shouldDuckAndroid: false,
+        });
+      } catch (err) {
+        console.warn('Gagal mengatur audio mode:', err);
+      }
+    };
 
+    setupAudio();
     loadData();
 
     return () => {
-      // Cleanup audio on unmount
       if (soundRef.current) {
         soundRef.current.unloadAsync();
       }
+      // Optional: reset audio mode
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
     };
   }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Load categories with tracks
       const data = await musicService.getCategoriesWithTracks();
       setCategories(data);
 
-      // Load user favorites if logged in
       if (user) {
         const userFavorites = await musicService.getUserFavorites(user.id);
         setFavorites(new Set(userFavorites.map(t => t.id)));
@@ -93,7 +101,7 @@ export default function MusicRelaxationScreen() {
 
   const togglePlay = async (track: MusicTrack) => {
     try {
-      // If same track is playing, pause it
+      // Jika track yang sama sedang diputar
       if (playingTrack === track.id && soundRef.current) {
         if (isPlaying) {
           await soundRef.current.pauseAsync();
@@ -105,7 +113,7 @@ export default function MusicRelaxationScreen() {
         return;
       }
 
-      // Stop current track if playing
+      // Hentikan track sebelumnya
       if (soundRef.current) {
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
@@ -114,34 +122,34 @@ export default function MusicRelaxationScreen() {
         setCurrentDuration(0);
       }
 
-      // Load and play new track
       if (!track.public_url) {
         Alert.alert('Error', 'URL musik tidak ditemukan');
         return;
       }
 
+      // Buat sound tanpa langsung play
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.public_url },
-        { shouldPlay: true, progressUpdateIntervalMillis: 500 }
+        { shouldPlay: false } // ❌ jangan auto play
       );
 
       soundRef.current = sound;
       setPlayingTrack(track.id);
+
+      // Mainkan secara manual
+      await sound.playAsync();
       setIsPlaying(true);
 
-      // Record play history
       if (user) {
         await musicService.recordPlay(user.id, track.id);
       }
 
-      // Listen for playback status updates
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
           if (!isSeeking) {
             setCurrentPosition(status.positionMillis / 1000);
             setCurrentDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
           }
-          
           if (status.didJustFinish) {
             setPlayingTrack(null);
             setIsPlaying(false);
@@ -152,7 +160,15 @@ export default function MusicRelaxationScreen() {
       });
     } catch (error: any) {
       console.error('Error playing track:', error);
-      Alert.alert('Error', 'Gagal memutar musik');
+      
+      if (error.message?.includes('AudioFocusNotAcquiredException')) {
+        Alert.alert(
+          'Audio Sedang Digunakan',
+          'Aplikasi lain sedang memutar audio. Silakan hentikan dulu (misal: YouTube, Spotify), lalu coba lagi.'
+        );
+      } else {
+        Alert.alert('Error', 'Gagal memutar musik: ' + (error.message || ''));
+      }
     }
   };
 
@@ -164,19 +180,12 @@ export default function MusicRelaxationScreen() {
 
     try {
       const isFavorited = await musicService.toggleFavorite(user.id, trackId);
-      
-      // Update local state
       setFavorites(prev => {
         const newSet = new Set(prev);
-        if (isFavorited) {
-          newSet.add(trackId);
-        } else {
-          newSet.delete(trackId);
-        }
+        if (isFavorited) newSet.add(trackId);
+        else newSet.delete(trackId);
         return newSet;
       });
-
-      // Reload data to update favorites list
       await loadData();
     } catch (error: any) {
       console.error('Error toggling favorite:', error);
@@ -205,11 +214,10 @@ export default function MusicRelaxationScreen() {
 
   const renderFavoriteCard = (track: MusicTrack) => {
     const isCurrentlyPlaying = playingTrack === track.id;
-    
     return (
       <TouchableOpacity
         key={track.id}
-        style={styles.favoriteCard}
+        style={[styles.favoriteCard, { backgroundColor: colors.card }]}
         onPress={() => togglePlay(track)}
         activeOpacity={0.7}
       >
@@ -220,15 +228,15 @@ export default function MusicRelaxationScreen() {
             <Play size={20} color={colors.textLight} fill={colors.textLight} />
           )}
         </View>
-        <Text style={styles.favoriteName} numberOfLines={2}>
+        <Text style={[styles.favoriteName, { color: colors.text }]} numberOfLines={2}>
           {track.name}
         </Text>
-        <Text style={styles.favoriteDuration}>
+        <Text style={[styles.favoriteDuration, { color: colors.secondaryText }]}>
           {musicService.formatDuration(track.duration)}
         </Text>
         {isCurrentlyPlaying && (
           <View style={styles.favoritePlayingBadge}>
-            <View style={styles.favoritePlayingDot} />
+            <View style={[styles.favoritePlayingDot, { backgroundColor: colors.primary }]} />
           </View>
         )}
       </TouchableOpacity>
@@ -238,9 +246,8 @@ export default function MusicRelaxationScreen() {
   const renderTrack = (track: MusicTrack) => {
     const isFavorite = favorites.has(track.id);
     const isCurrentlyPlaying = playingTrack === track.id;
-    
     return (
-      <View key={track.id} style={styles.trackCard}>
+      <View key={track.id} style={[styles.trackCard, { backgroundColor: colors.card }]}>
         <TouchableOpacity
           style={styles.trackContent}
           onPress={() => togglePlay(track)}
@@ -253,15 +260,15 @@ export default function MusicRelaxationScreen() {
             )}
           </View>
           <View style={styles.trackInfo}>
-            <Text style={styles.trackName}>{track.name}</Text>
-            <Text style={styles.trackDuration}>
+            <Text style={[styles.trackName, { color: colors.text }]}>{track.name}</Text>
+            <Text style={[styles.trackDuration, { color: colors.secondaryText }]}>
               {musicService.formatDuration(track.duration)}
             </Text>
           </View>
           {isCurrentlyPlaying && (
             <View style={styles.playingIndicator}>
-              <View style={styles.playingDot} />
-              <Text style={styles.playingText}>Playing</Text>
+              <View style={[styles.playingDot, { backgroundColor: colors.primary }]} />
+              <Text style={[styles.playingText, { color: colors.primary }]}>Playing</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -282,210 +289,213 @@ export default function MusicRelaxationScreen() {
     );
   };
 
+  const headerGradient = theme === 'dark'
+    ? ['#1A2A3A', '#253746']
+    : ['#6B9DC3', '#8FB3D5'];
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LinearGradient
-          colors={['#6B9DC3', '#8FB3D5']}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <ChevronLeft size={24} color={colors.textLight} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Musik Relaksasi</Text>
-            <View style={styles.placeholder} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <SafeAreaView style={styles.container}>
+          <LinearGradient colors={headerGradient} style={styles.header}>
+            <View style={styles.headerContent}>
+              <TouchableOpacity 
+                style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => router.back()}
+              >
+                <ChevronLeft size={24} color={colors.textLight} />
+              </TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: colors.textLight }]}>Musik Relaksasi</Text>
+              <View style={styles.placeholder} />
+            </View>
+            <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>
+              Dengarkan musik untuk tidur lebih nyenyak 🎵
+            </Text>
+          </LinearGradient>
+          
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Memuat musik...
+            </Text>
           </View>
-          <Text style={styles.headerSubtitle}>
-            Dengarkan musik untuk tidur lebih nyenyak 🎵
-          </Text>
-        </LinearGradient>
-        
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Memuat musik...</Text>
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#6B9DC3', '#8FB3D5']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <ChevronLeft size={24} color={colors.textLight} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Musik Relaksasi</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <Text style={styles.headerSubtitle}>
-          Dengarkan musik untuk tidur lebih nyenyak 🎵
-        </Text>
-      </LinearGradient>
-
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        {/* Favorites Section */}
-        {user && getFavoriteTracks().length > 0 && (
-          <View style={styles.favoritesSection}>
-            <View style={styles.favoritesSectionHeader}>
-              <Heart size={20} color={colors.danger} fill={colors.danger} />
-              <Text style={styles.favoritesSectionTitle}>Musik Favorit</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.favoritesScroll}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={headerGradient} style={styles.header}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity 
+              style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+              onPress={() => router.back()}
             >
-              {getFavoriteTracks().map(renderFavoriteCard)}
-            </ScrollView>
+              <ChevronLeft size={24} color={colors.textLight} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.textLight }]}>Musik Relaksasi</Text>
+            <View style={styles.placeholder} />
           </View>
-        )}
+          <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>
+            Dengarkan musik untuk tidur lebih nyenyak 🎵
+          </Text>
+        </LinearGradient>
 
-        {/* Now Playing Section */}
-        {playingTrack && (
-          <View style={styles.nowPlayingCard}>
-            <View style={styles.nowPlayingHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.nowPlayingLabel}>Sedang Diputar</Text>
-                <Text style={styles.nowPlayingTitle}>
-                  {categories
-                    .flatMap(cat => cat.tracks)
-                    .find(t => t.id === playingTrack)?.name}
+        <ScrollView 
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          {user && getFavoriteTracks().length > 0 && (
+            <View style={styles.favoritesSection}>
+              <View style={styles.favoritesSectionHeader}>
+                <Heart size={20} color={colors.danger} fill={colors.danger} />
+                <Text style={[styles.favoritesSectionTitle, { color: colors.text }]}>Musik Favorit</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.favoritesScroll}
+              >
+                {getFavoriteTracks().map(renderFavoriteCard)}
+              </ScrollView>
+            </View>
+          )}
+
+          {playingTrack && (
+            <View style={[styles.nowPlayingCard, { backgroundColor: colors.primary }]}>
+              <View style={styles.nowPlayingHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.nowPlayingLabel, { color: colors.textLight }]}>Sedang Diputar</Text>
+                  <Text style={[styles.nowPlayingTitle, { color: colors.textLight }]}>
+                    {categories
+                      .flatMap(cat => cat.tracks)
+                      .find(t => t.id === playingTrack)?.name}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.nowPlayingPlayButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                  onPress={() => {
+                    const track = categories
+                      .flatMap(cat => cat.tracks)
+                      .find(t => t.id === playingTrack);
+                    if (track) togglePlay(track);
+                  }}
+                >
+                  {isPlaying ? (
+                    <Pause size={28} color={colors.textLight} fill={colors.textLight} />
+                  ) : (
+                    <Play size={28} color={colors.textLight} fill={colors.textLight} />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.progressContainer}>
+                <Text style={[styles.progressTime, { color: colors.textLight }]}>
+                  {musicService.formatDuration(Math.floor(currentPosition))}
+                </Text>
+                <Slider
+                  style={styles.progressSlider}
+                  minimumValue={0}
+                  maximumValue={currentDuration || 1}
+                  value={currentPosition}
+                  onValueChange={onSliderValueChange}
+                  onSlidingComplete={onSliderSlidingComplete}
+                  minimumTrackTintColor={colors.textLight}
+                  maximumTrackTintColor={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.3)'}
+                  thumbTintColor={colors.textLight}
+                />
+                <Text style={[styles.progressTime, { color: colors.textLight }]}>
+                  {musicService.formatDuration(Math.floor(currentDuration))}
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.nowPlayingPlayButton}
-                onPress={() => {
-                  const track = categories
-                    .flatMap(cat => cat.tracks)
-                    .find(t => t.id === playingTrack);
-                  if (track) togglePlay(track);
-                }}
-              >
-                {isPlaying ? (
-                  <Pause size={28} color={colors.textLight} fill={colors.textLight} />
-                ) : (
-                  <Play size={28} color={colors.textLight} fill={colors.textLight} />
-                )}
-              </TouchableOpacity>
-            </View>
 
-            {/* Progress Bar */}
-            <View style={styles.progressContainer}>
-              <Text style={styles.progressTime}>
-                {musicService.formatDuration(Math.floor(currentPosition))}
-              </Text>
-              <Slider
-                style={styles.progressSlider}
-                minimumValue={0}
-                maximumValue={currentDuration || 1}
-                value={currentPosition}
-                onValueChange={onSliderValueChange}
-                onSlidingComplete={onSliderSlidingComplete}
-                minimumTrackTintColor={colors.textLight}
-                maximumTrackTintColor="rgba(255,255,255,0.3)"
-                thumbTintColor={colors.textLight}
-              />
-              <Text style={styles.progressTime}>
-                {musicService.formatDuration(Math.floor(currentDuration))}
+              <View style={styles.waveform}>
+                {[...Array(20)].map((_, i) => (
+                  <View 
+                    key={i} 
+                    style={[
+                      styles.waveformBar,
+                      { 
+                        height: isPlaying ? Math.random() * 30 + 10 : 15,
+                        opacity: isPlaying ? 0.7 : 0.3,
+                        backgroundColor: colors.textLight,
+                      }
+                    ]} 
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {categories.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.card }]}>
+              <Text style={styles.emptyStateEmoji}>🎵</Text>
+              <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Belum Ada Musik</Text>
+              <Text style={[styles.emptyStateText, { color: colors.secondaryText }]}>
+                Musik relaksasi akan segera tersedia
               </Text>
             </View>
-
-            {/* Waveform */}
-            <View style={styles.waveform}>
-              {[...Array(20)].map((_, i) => (
-                <View 
-                  key={i} 
-                  style={[
-                    styles.waveformBar,
-                    { 
-                      height: isPlaying ? Math.random() * 30 + 10 : 15,
-                      opacity: isPlaying ? 0.7 : 0.3
-                    }
-                  ]} 
-                />
+          ) : (
+            <>
+              {categories.map((category) => (
+                <View key={category.id} style={styles.categorySection}>
+                  <View style={styles.categoryHeader}>
+                    <Text style={[styles.categoryIcon, { color: colors.text }]}>{category.icon}</Text>
+                    <Text style={[styles.categoryTitle, { color: colors.text }]}>{category.name}</Text>
+                  </View>
+                  {category.description && (
+                    <Text style={[styles.categoryDescription, { color: colors.secondaryText }]}>
+                      {category.description}
+                    </Text>
+                  )}
+                  <View style={styles.tracksContainer}>
+                    {category.tracks.length === 0 ? (
+                      <Text style={[styles.noTracksText, { color: colors.secondaryText }]}>
+                        Belum ada musik di kategori ini
+                      </Text>
+                    ) : (
+                      category.tracks.map(renderTrack)
+                    )}
+                  </View>
+                </View>
               ))}
-            </View>
-          </View>
-        )}
+            </>
+          )}
 
-        {/* Empty State */}
-        {categories.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateEmoji}>🎵</Text>
-            <Text style={styles.emptyStateTitle}>Belum Ada Musik</Text>
-            <Text style={styles.emptyStateText}>
-              Musik relaksasi akan segera tersedia
+          <View style={[
+            styles.tipsCard,
+            { 
+              backgroundColor: theme === 'dark' ? colors.warning + '20' : '#FFF9E6',
+              borderLeftColor: colors.warning
+            }
+          ]}>
+            <Text style={[styles.tipsTitle, { color: colors.text }]}>💡 Tips Penggunaan</Text>
+            <Text style={[styles.tipsText, { color: colors.text }]}>
+              • Gunakan headphone atau speaker berkualitas{'\n'}
+              • Atur volume yang nyaman (tidak terlalu keras){'\n'}
+              • Dengarkan 30-60 menit sebelum tidur{'\n'}
+              • Kombinasikan dengan teknik pernapasan dalam
             </Text>
           </View>
-        ) : (
-          <>
-            {/* Music Categories */}
-            {categories.map((category) => (
-              <View key={category.id} style={styles.categorySection}>
-                <View style={styles.categoryHeader}>
-                  <Text style={styles.categoryIcon}>{category.icon}</Text>
-                  <Text style={styles.categoryTitle}>{category.name}</Text>
-                </View>
-                {category.description && (
-                  <Text style={styles.categoryDescription}>
-                    {category.description}
-                  </Text>
-                )}
-                <View style={styles.tracksContainer}>
-                  {category.tracks.length === 0 ? (
-                    <Text style={styles.noTracksText}>
-                      Belum ada musik di kategori ini
-                    </Text>
-                  ) : (
-                    category.tracks.map(renderTrack)
-                  )}
-                </View>
-              </View>
-            ))}
-          </>
-        )}
-
-        {/* Tips Card */}
-        <View style={styles.tipsCard}>
-          <Text style={styles.tipsTitle}>💡 Tips Penggunaan</Text>
-          <Text style={styles.tipsText}>
-            • Gunakan headphone atau speaker berkualitas{'\n'}
-            • Atur volume yang nyaman (tidak terlalu keras){'\n'}
-            • Dengarkan 30-60 menit sebelum tidur{'\n'}
-            • Kombinasikan dengan teknik pernapasan dalam
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F9FC',
   },
   header: {
     paddingTop: 50,
@@ -502,21 +512,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.textLight,
   },
   placeholder: {
     width: 40,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: colors.textLight,
     textAlign: 'center',
     opacity: 0.9,
   },
@@ -529,7 +536,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: colors.secondaryText,
     fontWeight: '500',
   },
   content: {
@@ -548,7 +554,6 @@ const styles = StyleSheet.create({
   favoritesSectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
   },
   favoritesScroll: {
     paddingRight: 20,
@@ -556,7 +561,6 @@ const styles = StyleSheet.create({
   },
   favoriteCard: {
     width: 140,
-    backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
@@ -578,14 +582,11 @@ const styles = StyleSheet.create({
   favoriteName: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
-    marginBottom: 6,
     textAlign: 'center',
     minHeight: 36,
   },
   favoriteDuration: {
     fontSize: 12,
-    color: colors.secondaryText,
     textAlign: 'center',
   },
   favoritePlayingBadge: {
@@ -595,20 +596,14 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.primary,
     borderWidth: 2,
     borderColor: '#FFF',
   },
-  favoritePlayingDot: {
-    width: '100%',
-    height: '100%',
-  },
   nowPlayingCard: {
-    backgroundColor: colors.primary,
     borderRadius: 20,
     padding: 20,
     marginBottom: 20,
-    shadowColor: colors.primary,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -624,20 +619,17 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   nowPlayingLabel: {
     fontSize: 12,
-    color: colors.textLight,
     opacity: 0.8,
     marginBottom: 4,
   },
   nowPlayingTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textLight,
     flex: 1,
     marginRight: 12,
   },
@@ -649,7 +641,6 @@ const styles = StyleSheet.create({
   },
   progressTime: {
     fontSize: 12,
-    color: colors.textLight,
     fontWeight: '600',
     minWidth: 40,
   },
@@ -665,15 +656,19 @@ const styles = StyleSheet.create({
   },
   waveformBar: {
     width: 3,
-    backgroundColor: colors.textLight,
     borderRadius: 2,
-    opacity: 0.7,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 80,
     paddingHorizontal: 40,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   emptyStateEmoji: {
     fontSize: 64,
@@ -682,12 +677,10 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 15,
-    color: colors.secondaryText,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -706,12 +699,9 @@ const styles = StyleSheet.create({
   categoryTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
   },
   categoryDescription: {
     fontSize: 14,
-    color: colors.secondaryText,
-    marginBottom: 12,
     fontStyle: 'italic',
   },
   tracksContainer: {
@@ -719,7 +709,6 @@ const styles = StyleSheet.create({
   },
   noTracksText: {
     fontSize: 14,
-    color: colors.secondaryText,
     textAlign: 'center',
     paddingVertical: 20,
     fontStyle: 'italic',
@@ -727,7 +716,6 @@ const styles = StyleSheet.create({
   trackCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
@@ -755,12 +743,10 @@ const styles = StyleSheet.create({
   trackName: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: 4,
   },
   trackDuration: {
     fontSize: 13,
-    color: colors.secondaryText,
   },
   playingIndicator: {
     flexDirection: 'row',
@@ -772,33 +758,27 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
   },
   playingText: {
     fontSize: 12,
-    color: colors.primary,
     fontWeight: '600',
   },
   favoriteButton: {
     padding: 8,
   },
   tipsCard: {
-    backgroundColor: '#FFF9E6',
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: '#FFA726',
   },
   tipsTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
     marginBottom: 12,
   },
   tipsText: {
     fontSize: 14,
-    color: colors.text,
     lineHeight: 22,
   },
 });
