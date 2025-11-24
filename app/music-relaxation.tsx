@@ -12,10 +12,12 @@ import {
   RefreshControl,
   Alert,
   Dimensions,
+  AppState,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { useRouter } from 'expo-router';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { musicService, MusicCategoryWithTracks, MusicTrack } from '../services/music';
@@ -38,20 +40,23 @@ export default function MusicRelaxationScreen() {
   const [currentPosition, setCurrentPosition] = useState(0);
   const [currentDuration, setCurrentDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     const setupAudio = async () => {
       try {
+        // PENTING: Konfigurasi untuk background playback
         await Audio.setAudioModeAsync({
           // iOS
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
-          interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_DUCK,
-          // Android
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          shouldDuckAndroid: false,
+          
+          // Android - KUNCI UTAMA untuk background
           staysActiveInBackground: true,
           playsThroughEarpieceAndroid: false,
-          interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_DUCK,
-          shouldDuckAndroid: false,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
         });
       } catch (err) {
         console.warn('Gagal mengatur audio mode:', err);
@@ -61,19 +66,42 @@ export default function MusicRelaxationScreen() {
     setupAudio();
     loadData();
 
+    // Handle app state changes (foreground/background)
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App kembali ke foreground - sync state
+        syncPlaybackState();
+      }
+      appState.current = nextAppState;
+    });
+
     return () => {
+      subscription.remove();
       if (soundRef.current) {
         soundRef.current.unloadAsync();
       }
-      // Optional: reset audio mode
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: false,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
+      deactivateKeepAwake();
     };
   }, []);
+
+  // Sync playback state when returning from background
+  const syncPlaybackState = async () => {
+    if (soundRef.current) {
+      try {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          setIsPlaying(status.isPlaying);
+          setCurrentPosition(status.positionMillis / 1000);
+          setCurrentDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
+        }
+      } catch (error) {
+        console.error('Error syncing playback state:', error);
+      }
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -106,9 +134,11 @@ export default function MusicRelaxationScreen() {
         if (isPlaying) {
           await soundRef.current.pauseAsync();
           setIsPlaying(false);
+          deactivateKeepAwake(); // Matikan keep awake saat pause
         } else {
           await soundRef.current.playAsync();
           setIsPlaying(true);
+          await activateKeepAwakeAsync(); // Aktifkan keep awake saat play
         }
         return;
       }
@@ -120,6 +150,7 @@ export default function MusicRelaxationScreen() {
         soundRef.current = null;
         setCurrentPosition(0);
         setCurrentDuration(0);
+        deactivateKeepAwake();
       }
 
       if (!track.public_url) {
@@ -127,44 +158,56 @@ export default function MusicRelaxationScreen() {
         return;
       }
 
-      // Buat sound tanpa langsung play
+      // Buat sound dengan konfigurasi background
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.public_url },
-        { shouldPlay: false } // ❌ jangan auto play
+        { 
+          shouldPlay: true,
+          isLooping: false,
+          // PENTING: Ini memungkinkan audio berjalan di background
+          progressUpdateIntervalMillis: 1000,
+        }
       );
 
       soundRef.current = sound;
       setPlayingTrack(track.id);
-
-      // Mainkan secara manual
-      await sound.playAsync();
       setIsPlaying(true);
+      
+      // Aktifkan keep awake untuk mencegah layar mati menghentikan audio
+      await activateKeepAwakeAsync();
 
       if (user) {
         await musicService.recordPlay(user.id, track.id);
       }
 
+      // Update progress
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
           if (!isSeeking) {
             setCurrentPosition(status.positionMillis / 1000);
             setCurrentDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
           }
+          
+          // Update playing state
+          setIsPlaying(status.isPlaying);
+          
           if (status.didJustFinish) {
             setPlayingTrack(null);
             setIsPlaying(false);
             setCurrentPosition(0);
             setCurrentDuration(0);
+            deactivateKeepAwake();
           }
         }
       });
     } catch (error: any) {
       console.error('Error playing track:', error);
+      deactivateKeepAwake();
       
       if (error.message?.includes('AudioFocusNotAcquiredException')) {
         Alert.alert(
           'Audio Sedang Digunakan',
-          'Aplikasi lain sedang memutar audio. Silakan hentikan dulu (misal: YouTube, Spotify), lalu coba lagi.'
+          'Aplikasi lain sedang memutar audio. Silakan hentikan dulu, lalu coba lagi.'
         );
       } else {
         Alert.alert('Error', 'Gagal memutar musik: ' + (error.message || ''));
@@ -411,7 +454,7 @@ export default function MusicRelaxationScreen() {
                   onValueChange={onSliderValueChange}
                   onSlidingComplete={onSliderSlidingComplete}
                   minimumTrackTintColor={colors.textLight}
-                  maximumTrackTintColor={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.3)'}
+                  maximumTrackTintColor="rgba(255,255,255,0.3)"
                   thumbTintColor={colors.textLight}
                 />
                 <Text style={[styles.progressTime, { color: colors.textLight }]}>
@@ -484,6 +527,7 @@ export default function MusicRelaxationScreen() {
               • Gunakan headphone atau speaker berkualitas{'\n'}
               • Atur volume yang nyaman (tidak terlalu keras){'\n'}
               • Dengarkan 30-60 menit sebelum tidur{'\n'}
+              • Musik akan tetap berjalan di background{'\n'}
               • Kombinasikan dengan teknik pernapasan dalam
             </Text>
           </View>
@@ -598,6 +642,11 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
     borderColor: '#FFF',
+  },
+  favoritePlayingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   nowPlayingCard: {
     borderRadius: 20,

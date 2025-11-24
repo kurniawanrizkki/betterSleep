@@ -82,32 +82,51 @@ export default function ProductsScreen() {
     }
   };
 
-  // ✅ Fungsi untuk membuka affiliate link
-  const openAffiliateLink = (product: Product) => {
+  // ✅ Improved function to open affiliate links with better error handling
+  const openAffiliateLink = async (product: Product) => {
     if (!product.affiliate_link) {
       Alert.alert('Info', 'Link afiliasi tidak tersedia untuk produk ini.');
       return;
     }
 
-    const url = product.affiliate_link.trim();
-    // Validasi URL dasar
+    let url = product.affiliate_link.trim();
+    
+    // Ensure URL has proper protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      Alert.alert('Error', 'Link tidak valid');
-      return;
+      url = 'https://' + url;
     }
 
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Alert.alert('Error', 'Tidak dapat membuka link ini di perangkat Anda.');
+    console.log('Attempting to open URL:', url);
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      console.log('URL supported:', supported);
+      
+      if (supported) {
+        await Linking.openURL(url);
+        console.log('URL opened successfully');
+      } else {
+        // Fallback: try to open anyway (sometimes canOpenURL returns false but openURL still works)
+        try {
+          await Linking.openURL(url);
+          console.log('URL opened via fallback');
+        } catch (innerError: any) {
+          console.error('Fallback also failed:', innerError);
+          Alert.alert(
+            'Error', 
+            'Tidak dapat membuka link ini di perangkat Anda.',
+            [{ text: 'OK' }]
+          );
         }
-      })
-      .catch((err) => {
-        console.error('Gagal membuka URL:', err);
-        Alert.alert('Error', 'Gagal membuka link: ' + err.message);
-      });
+      }
+    } catch (error: any) {
+      console.error('Error opening URL:', error);
+      Alert.alert(
+        'Error',
+        `Gagal membuka link: ${error.message}`,
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const renderFeaturedProduct = (product: Product) => {
@@ -117,7 +136,7 @@ export default function ProductsScreen() {
       <TouchableOpacity
         key={product.id}
         style={[styles.featuredCard, { backgroundColor: colors.card }]}
-        onPress={() => openAffiliateLink(product)} // ✅ Tambahkan onPress
+        onPress={() => openAffiliateLink(product)}
         activeOpacity={0.8}
       >
         <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
@@ -161,7 +180,7 @@ export default function ProductsScreen() {
             <TouchableOpacity
               style={styles.favoriteBtn}
               onPress={(e) => {
-                e.stopPropagation(); // ✅ Cegah klik menembus ke parent
+                e.stopPropagation();
                 toggleFavorite(product.id);
               }}
             >
@@ -184,7 +203,7 @@ export default function ProductsScreen() {
       <TouchableOpacity 
         key={product.id} 
         style={[styles.productCard, { backgroundColor: colors.card }]}
-        onPress={() => openAffiliateLink(product)} // ✅ Tambahkan onPress
+        onPress={() => openAffiliateLink(product)}
         activeOpacity={0.8}
       >
         {product.public_image_url ? (
@@ -231,7 +250,7 @@ export default function ProductsScreen() {
                 }
               ]}
               onPress={(e) => {
-                e.stopPropagation(); // ✅ Cegah konflik klik
+                e.stopPropagation();
                 toggleFavorite(product.id);
               }}
             >

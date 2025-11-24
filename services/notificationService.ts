@@ -1,456 +1,242 @@
 import * as Notifications from "expo-notifications";
-import * as Device from "expo-device";
-import { Platform, Alert, Linking } from "react-native";
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Configure notification handler
-// CRITICAL: Never show notifications when app is in foreground
+// ✅ CRITICAL: Set notification handler (seperti di kode YouTube)
 Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    // Always return false for foreground to prevent showing
-    // Notifications will ONLY appear when app is in background or closed
-    return {
-      shouldShowAlert: false,
-      shouldShowBanner: false,
-      shouldShowList: false,
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-      priority: Notifications.AndroidNotificationPriority.MAX,
-    };
-  },
+  handleNotification: async () => ({
+    shouldPlaySound: true, // ✅ Aktifkan suara
+    shouldShowAlert: true,
+    shouldSetBadge: true,
+  }),
 });
 
-export interface ScheduleNotificationParams {
+interface ScheduleSleepReminderParams {
   bedtime: string;
   reminderBefore: number;
   reminderType: "notification" | "fullscreen";
   userId: string;
 }
 
+const STORAGE_KEY = "sleep_alarm_ids";
+
 export const notificationService = {
-  isInitialized: false,
+  // Request permissions
+  async requestPermissions() {
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  /**
-   * Initialize notification system once
-   */
-  async initialize() {
-    if (this.isInitialized) return;
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
 
+    if (finalStatus !== "granted") {
+      throw new Error("Izin notifikasi tidak diberikan");
+    }
+
+    // Android: Set notification channel
     if (Platform.OS === "android") {
-      try {
-        await Notifications.setNotificationChannelAsync("sleep-alarm", {
-          name: "Sleep Alarm",
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 500, 200, 500],
-          sound: "default",
-          enableVibrate: true,
-          bypassDnd: true,
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
-
-        this.isInitialized = true;
-        console.log("✅ Notification system initialized");
-      } catch (error) {
-        console.error("❌ Error initializing notifications:", error);
-      }
+      await Notifications.setNotificationChannelAsync("sleep-reminders", {
+        name: "Sleep Reminders",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        sound: "default",
+        enableLights: true,
+        enableVibrate: true,
+        lockscreenVisibility:
+          Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
     }
+
+    return finalStatus === "granted";
   },
 
-  /**
-   * Request permissions
-   */
-  async requestPermissions(): Promise<boolean> {
-    if (!Device.isDevice) {
-      Alert.alert("⚠️", "Notifikasi hanya bekerja di perangkat fisik");
-      return false;
-    }
-
+  // ✅ Schedule daily repeating alarm (seperti kode YouTube)
+  async scheduleSleepReminder({
+    bedtime,
+    reminderBefore,
+    reminderType,
+    userId,
+  }: ScheduleSleepReminderParams) {
     try {
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== "granted") {
-        Alert.alert(
-          "❌ Izin Diperlukan",
-          "Silakan aktifkan izin notifikasi di:\nPengaturan > Aplikasi > BetterSleep > Notifikasi",
-          [
-            { text: "Batal" },
-            { text: "Buka Pengaturan", onPress: () => Linking.openSettings() },
-          ]
-        );
-        return false;
-      }
-
-      await this.initialize();
-      return true;
-    } catch (error) {
-      console.error("❌ Permission error:", error);
-      return false;
-    }
-  },
-
-  /**
-   * Get next alarm time from bedtime
-   */
-  getNextAlarmTime(bedtime: string, reminderBefore: number): Date {
-    const now = new Date();
-    const [bedHour, bedMinute] = bedtime.split(":").map(Number);
-
-    console.log(`📊 Calculating alarm time:`);
-    console.log(
-      `   Bedtime: ${bedHour}:${bedMinute.toString().padStart(2, "0")}`
-    );
-    console.log(`   Reminder before: ${reminderBefore} minutes`);
-
-    // Calculate total minutes for bedtime
-    let bedtimeMinutes = bedHour * 60 + bedMinute;
-    console.log(`   Bedtime in minutes: ${bedtimeMinutes}`);
-
-    // Calculate alarm time (bedtime - reminderBefore)
-    let alarmMinutes = bedtimeMinutes - reminderBefore;
-    console.log(`   Alarm minutes (before adjustment): ${alarmMinutes}`);
-
-    // Handle negative (crosses midnight)
-    if (alarmMinutes < 0) {
-      alarmMinutes += 24 * 60; // Add 24 hours
-      console.log(`   ⚠️ Crosses midnight, adjusted to: ${alarmMinutes}`);
-    }
-
-    const alarmHour = Math.floor(alarmMinutes / 60);
-    const alarmMinute = alarmMinutes % 60;
-
-    console.log(
-      `   Final alarm time: ${alarmHour}:${alarmMinute
-        .toString()
-        .padStart(2, "0")}`
-    );
-
-    // Create alarm time for TODAY first
-    const alarmTime = new Date();
-    alarmTime.setHours(alarmHour, alarmMinute, 0, 0);
-
-    console.log(`   Alarm date (today): ${alarmTime.toLocaleString("id-ID")}`);
-    console.log(`   Current time: ${now.toLocaleString("id-ID")}`);
-    console.log(
-      `   Time difference: ${Math.floor(
-        (alarmTime.getTime() - now.getTime()) / 1000 / 60
-      )} minutes`
-    );
-
-    // If alarm time has already passed today, schedule for tomorrow
-    if (alarmTime <= now) {
-      alarmTime.setDate(alarmTime.getDate() + 1);
-      console.log(
-        `   ⏭️ Time passed, moving to tomorrow: ${alarmTime.toLocaleString(
-          "id-ID"
-        )}`
-      );
-    }
-
-    // Additional safety check: alarm must be at least 1 minute in the future
-    const minutesUntilAlarm = Math.floor(
-      (alarmTime.getTime() - now.getTime()) / 1000 / 60
-    );
-    if (minutesUntilAlarm < 1) {
-      console.log(
-        `   ⚠️ WARNING: Alarm is less than 1 minute away! Adding 1 day.`
-      );
-      alarmTime.setDate(alarmTime.getDate() + 1);
-    }
-
-    console.log(`   ✅ Final alarm time: ${alarmTime.toLocaleString("id-ID")}`);
-
-    return alarmTime;
-  },
-
-  /**
-   * Schedule sleep reminder
-   */
-  async scheduleSleepReminder(
-    params: ScheduleNotificationParams
-  ): Promise<boolean> {
-    try {
-      console.log("\n🔔 ===== SCHEDULING ALARM =====");
-      console.log("Params:", params);
+      // Cancel previous alarms first
+      await this.cancelAllNotifications();
 
       // Request permissions
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) {
-        console.log("❌ No permission granted");
-        return false;
+        throw new Error("Notification permission denied");
       }
 
-      // Cancel ALL existing notifications first
-      await this.cancelAllNotifications();
+      // Parse bedtime
+      const [bedHour, bedMin] = bedtime.split(":").map(Number);
 
-      // Wait a bit to ensure cancellation completes
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("✅ All previous alarms cancelled");
+      // Calculate alarm time (bedtime - reminderBefore)
+      let alarmMinutes = bedHour * 60 + bedMin - reminderBefore;
+      if (alarmMinutes < 0) alarmMinutes += 24 * 60;
 
-      // Get next alarm time
-      const nextAlarm = this.getNextAlarmTime(
-        params.bedtime,
-        params.reminderBefore
-      );
-      const now = new Date();
+      const alarmHour = Math.floor(alarmMinutes / 60);
+      const alarmMin = alarmMinutes % 60;
 
-      const minutesUntilAlarm = Math.floor(
-        (nextAlarm.getTime() - now.getTime()) / 1000 / 60
+      console.log(
+        `🔔 Scheduling alarm for ${alarmHour}:${alarmMin
+          .toString()
+          .padStart(2, "0")}`
       );
 
-      console.log("📅 Current time:", now.toLocaleString("id-ID"));
-      console.log("⏰ Next alarm:", nextAlarm.toLocaleString("id-ID"));
-      console.log("⏱️  Time until alarm:", minutesUntilAlarm, "minutes");
-
-      // CRITICAL: Verify alarm is in the future
-      if (minutesUntilAlarm < 1) {
-        console.log("❌ ERROR: Alarm time is not in the future!");
-        Alert.alert(
-          "❌ Error Waktu",
-          `Alarm tidak dapat dijadwalkan karena waktu sudah terlewat.\n\nSekarang: ${now.toLocaleTimeString(
-            "id-ID"
-          )}\nAlarm: ${nextAlarm.toLocaleTimeString(
-            "id-ID"
-          )}\n\nSilakan atur ulang dengan waktu yang lebih lama dari sekarang.`
-        );
-        return false;
-      }
-
-      // Warn if alarm is too soon
-      if (minutesUntilAlarm < 5) {
-        const proceed = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            "⚠️ Peringatan",
-            `Alarm akan berbunyi dalam ${minutesUntilAlarm} menit. Apakah Anda yakin?`,
-            [
-              { text: "Batal", onPress: () => resolve(false), style: "cancel" },
-              { text: "Ya, Lanjutkan", onPress: () => resolve(true) },
-            ]
-          );
-        });
-
-        if (!proceed) {
-          console.log("❌ User cancelled scheduling");
-          return false;
-        }
-      }
-
-      // Schedule alarm for the next 7 days
-      const scheduledIds: string[] = [];
-
-      for (let day = 0; day < 7; day++) {
-        const alarmDate = new Date(nextAlarm);
-        alarmDate.setDate(alarmDate.getDate() + day);
-
-        const notificationId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "🌙 Waktunya Bersiap Tidur!",
-            body: `Dalam ${params.reminderBefore} menit lagi, Anda harus tidur pukul ${params.bedtime}. Persiapkan diri sekarang! 😴`,
-            data: {
-              type: "sleep_reminder",
-              userId: params.userId,
-              bedtime: params.bedtime,
-              scheduledFor: alarmDate.toISOString(),
-              day: day,
-            },
-            sound: true,
-            priority: Notifications.AndroidNotificationPriority.MAX,
-            vibrate: [0, 500, 200, 500, 200, 500],
-            badge: 1,
+      // ✅ Schedule notification with DAILY REPEAT (seperti kode YouTube)
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🌙 Pengingat Tidur",
+          body: `Waktunya mempersiapkan diri untuk tidur pukul ${bedtime}! Tidur yang cukup penting untuk kesehatan Anda.`,
+          data: {
+            type: "sleep_reminder",
+            bedtime,
+            userId,
           },
-          trigger: {
-            date: alarmDate,
-            channelId: "sleep-alarm",
-          },
-        });
-
-        scheduledIds.push(notificationId);
-        console.log(
-          `  ✅ Day ${day + 1}: ${alarmDate.toLocaleString(
-            "id-ID"
-          )} - ID: ${notificationId}`
-        );
-      }
-
-      // Verify scheduled notifications
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const allScheduled = await this.getScheduledNotifications();
-      console.log(`\n📋 Total notifications scheduled: ${allScheduled.length}`);
-
-      allScheduled.forEach((notif, idx) => {
-        if (notif.trigger && "date" in notif.trigger) {
-          const date = new Date((notif.trigger as any).value * 1000);
-          console.log(`  ${idx + 1}. ${date.toLocaleString("id-ID")}`);
-        }
+          sound: "default",
+          priority:
+            reminderType === "fullscreen"
+              ? Notifications.AndroidNotificationPriority.MAX
+              : Notifications.AndroidNotificationPriority.HIGH,
+          vibrate:
+            reminderType === "fullscreen"
+              ? [0, 500, 500, 500]
+              : [0, 250, 250, 250],
+        },
+        trigger: {
+          hour: alarmHour,
+          minute: alarmMin,
+          repeats: true, // ✅ PENTING: Daily repeat
+        },
       });
 
-      console.log("===== ALARM SETUP COMPLETE =====\n");
+      // ✅ Save notification ID to AsyncStorage (seperti kode YouTube)
+      await this.saveNotificationId(identifier);
 
-      if (scheduledIds.length === 0) {
-        Alert.alert("❌ Error", "Gagal menjadwalkan alarm");
-        return false;
-      }
-
-      return true;
+      console.log("✅ Alarm scheduled with ID:", identifier);
+      return identifier;
     } catch (error) {
-      console.error("❌ Error scheduling alarm:", error);
-      Alert.alert("Error", `Gagal menjadwalkan alarm: ${error}`);
-      return false;
+      console.error("❌ Error scheduling notification:", error);
+      throw error;
     }
   },
 
-  /**
-   * Cancel all notifications
-   */
-  async cancelAllNotifications(): Promise<void> {
+  // ✅ Save notification ID (seperti kode YouTube)
+  async saveNotificationId(id: string) {
     try {
-      // Cancel all scheduled
-      await Notifications.cancelAllScheduledNotificationsAsync();
-
-      // Dismiss all displayed
-      await Notifications.dismissAllNotificationsAsync();
-
-      console.log("🗑️  All notifications cancelled and dismissed");
+      const existingIds = await this.getStoredNotificationIds();
+      const updatedIds = [...existingIds, id];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedIds));
+      console.log("💾 Saved notification IDs:", updatedIds);
     } catch (error) {
-      console.error("❌ Error cancelling notifications:", error);
+      console.error("Error saving notification ID:", error);
     }
   },
 
-  /**
-   * Get scheduled notifications
-   */
-  async getScheduledNotifications(): Promise<
-    Notifications.NotificationRequest[]
-  > {
+  // ✅ Get stored notification IDs
+  async getStoredNotificationIds(): Promise<string[]> {
     try {
-      return await Notifications.getAllScheduledNotificationsAsync();
+      const jsonValue = await AsyncStorage.getItem(STORAGE_KEY);
+      return jsonValue ? JSON.parse(jsonValue) : [];
     } catch (error) {
-      console.error("❌ Error getting scheduled:", error);
+      console.error("Error getting notification IDs:", error);
       return [];
     }
   },
 
-  /**
-   * Test notification (10 seconds from now)
-   */
-  async sendTestNotification(): Promise<void> {
+  // Cancel all notifications
+  async cancelAllNotifications() {
     try {
-      const hasPermission = await this.requestPermissions();
-      if (!hasPermission) return;
-
-      const testTime = new Date();
-      testTime.setSeconds(testTime.getSeconds() + 10);
-
-      console.log("\n🧪 ===== TEST ALARM =====");
-      console.log("Current time:", new Date().toLocaleString("id-ID"));
-      console.log("Test alarm will fire at:", testTime.toLocaleString("id-ID"));
-
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "🧪 TEST ALARM BETTERSLEEP",
-          body: "Jika Anda melihat ini, alarm BERFUNGSI dengan baik! 🎉🎊",
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          vibrate: [0, 500, 200, 500],
-          data: {
-            type: "test",
-            scheduledFor: testTime.toISOString(),
-          },
-        },
-        trigger: {
-          seconds: 10,
-          channelId: "sleep-alarm",
-        },
-      });
-
-      console.log("Test alarm ID:", id);
-      console.log("===== TEST SCHEDULED =====\n");
-
-      return; // Don't show alert, return immediately
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      console.log("🗑️ All alarms cancelled");
     } catch (error) {
-      console.error("❌ Error scheduling test:", error);
-      Alert.alert("Error", "Gagal menjadwalkan test");
+      console.error("Error cancelling notifications:", error);
     }
   },
 
-  /**
-   * Check notification status
-   */
-  async checkNotificationStatus(): Promise<{
-    enabled: boolean;
-    scheduled: number;
-    message: string;
-    nextAlarm?: string;
-  }> {
+  // Check notification status
+  async checkNotificationStatus() {
     try {
       const { status } = await Notifications.getPermissionsAsync();
-      const scheduled = await this.getScheduledNotifications();
+      const scheduledNotifications =
+        await Notifications.getAllScheduledNotificationsAsync();
+      const storedIds = await this.getStoredNotificationIds();
 
-      // Find next alarm
-      let nextAlarm: string | undefined;
-      let nextAlarmTime: Date | null = null;
-
-      for (const notif of scheduled) {
-        if (notif.trigger && "date" in notif.trigger) {
-          const triggerTimestamp = (notif.trigger as any).value;
-          const date = new Date(triggerTimestamp * 1000);
-
-          if (!nextAlarmTime || date < nextAlarmTime) {
-            nextAlarmTime = date;
-            nextAlarm = date.toLocaleString("id-ID", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          }
+      let nextAlarm = "Tidak ada";
+      if (scheduledNotifications.length > 0) {
+        const next = scheduledNotifications[0];
+        if (
+          next.trigger &&
+          "hour" in next.trigger &&
+          "minute" in next.trigger
+        ) {
+          nextAlarm = `${next.trigger.hour
+            .toString()
+            .padStart(2, "0")}:${next.trigger.minute
+            .toString()
+            .padStart(2, "0")}`;
         }
-      }
-
-      let message = "";
-      if (status !== "granted") {
-        message = "❌ Izin notifikasi belum diberikan";
-      } else if (scheduled.length === 0) {
-        message = "⚠️ Tidak ada alarm terjadwal";
-      } else {
-        message = `✅ ${scheduled.length} alarm aktif`;
       }
 
       return {
         enabled: status === "granted",
-        scheduled: scheduled.length,
-        message,
-        nextAlarm,
+        scheduled: scheduledNotifications.length,
+        message:
+          status === "granted"
+            ? scheduledNotifications.length > 0
+              ? `✅ ${scheduledNotifications.length} alarm terjadwal dan aktif!`
+              : "⚠️ Belum ada alarm yang dijadwalkan. Simpan jadwal untuk mengaktifkan alarm."
+            : "❌ Izin notifikasi belum diberikan. Buka pengaturan untuk mengaktifkan.",
+        nextAlarm: scheduledNotifications.length > 0 ? nextAlarm : undefined,
       };
     } catch (error) {
-      console.error("❌ Error checking status:", error);
+      console.error("Error checking notification status:", error);
       return {
         enabled: false,
         scheduled: 0,
-        message: "❌ Error",
+        message: "Error memeriksa status notifikasi",
       };
     }
   },
 
-  /**
-   * Add listeners
-   */
-  addNotificationResponseListener(
-    callback: (response: Notifications.NotificationResponse) => void
-  ) {
-    return Notifications.addNotificationResponseReceivedListener(callback);
+  // Send test notification (10 seconds from now)
+  async sendTestNotification() {
+    try {
+      await this.requestPermissions();
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "✅ Test Alarm",
+          body: "Alarm berfungsi dengan baik! Notifikasi dapat muncul saat aplikasi tertutup.",
+          data: { type: "test" },
+          sound: "default",
+        },
+        trigger: {
+          seconds: 10, // 10 detik dari sekarang
+        },
+      });
+
+      console.log("🧪 Test notification scheduled for 10 seconds from now");
+    } catch (error) {
+      console.error("Error sending test notification:", error);
+      throw error;
+    }
   },
 
+  // Notification listeners
   addNotificationReceivedListener(
     callback: (notification: Notifications.Notification) => void
   ) {
     return Notifications.addNotificationReceivedListener(callback);
+  },
+
+  addNotificationResponseListener(
+    callback: (response: Notifications.NotificationResponse) => void
+  ) {
+    return Notifications.addNotificationResponseReceivedListener(callback);
   },
 };

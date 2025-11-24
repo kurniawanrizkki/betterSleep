@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
-import { notificationService } from "./notificationService";
+import { alarmService } from "./alarmService"; // ✅ Changed from notificationService
 
 type SleepSchedule = Database["public"]["Tables"]["sleep_schedules"]["Row"];
 type SleepScheduleInsert =
@@ -9,7 +9,9 @@ type SleepScheduleUpdate =
   Database["public"]["Tables"]["sleep_schedules"]["Update"];
 
 export const sleepScheduleService = {
-  // Get active schedule
+  /**
+   * Get active schedule for user
+   */
   async getActive(userId: string) {
     const { data, error } = await supabase
       .from("sleep_schedules")
@@ -22,11 +24,15 @@ export const sleepScheduleService = {
     return data as SleepSchedule | null;
   },
 
-  // Create or update schedule WITH notification scheduling
+  /**
+   * Create or update schedule WITH alarm scheduling
+   */
   async upsert(
     schedule: SleepScheduleInsert | (SleepScheduleUpdate & { user_id: string })
   ) {
     try {
+      console.log("📝 Upserting sleep schedule...");
+
       // Deactivate all existing schedules first
       await supabase
         .from("sleep_schedules")
@@ -42,42 +48,55 @@ export const sleepScheduleService = {
 
       if (error) throw error;
 
-      // Schedule notification if reminder is enabled
+      console.log("✅ Schedule saved to database:", data);
+
+      // ✅ Schedule REAL alarm if reminder is enabled
       if (schedule.reminder_enabled && schedule.bedtime) {
-        const notificationId = await notificationService.scheduleSleepReminder({
+        console.log("🔔 Scheduling alarm...");
+
+        const alarmId = await alarmService.scheduleSleepReminder({
           bedtime: schedule.bedtime,
           reminderBefore: schedule.reminder_before || 30,
           reminderType: schedule.reminder_type || "notification",
           userId: schedule.user_id,
         });
 
-        // Optionally save notification ID to database
-        if (notificationId && data) {
+        console.log("✅ Alarm scheduled with ID:", alarmId);
+
+        // Save alarm ID to database
+        if (alarmId && data) {
           await supabase
             .from("sleep_schedules")
             .update({
-              notification_id: notificationId,
+              notification_id: alarmId,
             } as any)
             .eq("id", data.id);
+
+          console.log("✅ Alarm ID saved to database");
         }
       } else {
-        // Cancel notifications if reminder is disabled
-        await notificationService.cancelAllNotifications();
+        // Cancel alarms if reminder is disabled
+        console.log("❌ Reminder disabled, cancelling all alarms...");
+        await alarmService.cancelAllAlarms();
       }
 
       return data as SleepSchedule;
     } catch (error) {
-      console.error("Error in upsert:", error);
+      console.error("❌ Error in upsert:", error);
       throw error;
     }
   },
 
-  // Update schedule WITH notification rescheduling
+  /**
+   * Update schedule WITH alarm rescheduling
+   */
   async update(
     id: string,
     updates: SleepScheduleUpdate & { user_id?: string }
   ) {
     try {
+      console.log("📝 Updating sleep schedule...");
+
       const { data, error } = await supabase
         .from("sleep_schedules")
         .update(updates)
@@ -87,43 +106,53 @@ export const sleepScheduleService = {
 
       if (error) throw error;
 
-      // Reschedule notification if reminder settings changed
+      console.log("✅ Schedule updated in database:", data);
+
+      // ✅ Reschedule alarm if reminder settings changed
       if (data && updates.reminder_enabled !== undefined) {
         if (updates.reminder_enabled && data.bedtime) {
-          const notificationId =
-            await notificationService.scheduleSleepReminder({
-              bedtime: data.bedtime,
-              reminderBefore: data.reminder_before || 30,
-              reminderType: data.reminder_type || "notification",
-              userId: data.user_id,
-            });
+          console.log("🔔 Rescheduling alarm...");
 
-          if (notificationId) {
+          const alarmId = await alarmService.scheduleSleepReminder({
+            bedtime: data.bedtime,
+            reminderBefore: data.reminder_before || 30,
+            reminderType: data.reminder_type || "notification",
+            userId: data.user_id,
+          });
+
+          console.log("✅ Alarm rescheduled with ID:", alarmId);
+
+          if (alarmId) {
             await supabase
               .from("sleep_schedules")
               .update({
-                notification_id: notificationId,
+                notification_id: alarmId,
               } as any)
               .eq("id", id);
           }
         } else {
-          // Cancel notifications if reminder is disabled
-          await notificationService.cancelAllNotifications();
+          // Cancel alarms if reminder is disabled
+          console.log("❌ Reminder disabled, cancelling all alarms...");
+          await alarmService.cancelAllAlarms();
         }
       }
 
       return data as SleepSchedule;
     } catch (error) {
-      console.error("Error in update:", error);
+      console.error("❌ Error in update:", error);
       throw error;
     }
   },
 
-  // Delete schedule and cancel notifications
+  /**
+   * Delete schedule and cancel alarms
+   */
   async delete(id: string) {
     try {
-      // Cancel all notifications
-      await notificationService.cancelAllNotifications();
+      console.log("🗑️ Deleting schedule...");
+
+      // Cancel all alarms
+      await alarmService.cancelAllAlarms();
 
       const { error } = await supabase
         .from("sleep_schedules")
@@ -131,8 +160,10 @@ export const sleepScheduleService = {
         .eq("id", id);
 
       if (error) throw error;
+
+      console.log("✅ Schedule deleted");
     } catch (error) {
-      console.error("Error in delete:", error);
+      console.error("❌ Error in delete:", error);
       throw error;
     }
   },

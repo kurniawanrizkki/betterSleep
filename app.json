@@ -8,15 +8,6 @@
     "scheme": "bettersleep",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "UIBackgroundModes": [
-          "audio",
-          "fetch"
-        ]
-      }
-    },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -36,11 +27,18 @@
         "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "com.android.alarm.permission.SET_ALARM"
+        "com.android.alarm.permission.SET_ALARM",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.DISABLE_KEYGUARD",
+        "android.permission.TURN_SCREEN_ON"
       ],
       "useNextNotificationsApi": true,
-      "allowBackup": false
+      "allowBackup": false,
+      "blockedPermissions": []
     },
     "web": {
       "output": "static",
@@ -71,6 +69,37 @@
           "mode": "production",
           "androidMode": "default",
           "androidCollapsedTitle": "BetterSleep Reminder"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice features."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.facebook.react.** { *; }\n-keep class com.facebook.jni.** { *; }",
+            "minSdkVersion": 24
+          } 
+        }
+      ],
+      [
+        "expo-alarm-module",
+        {
+          "android": {
+            "requestExactAlarmPermission": true,
+            "scheduleExactAlarm": true,
+            "useFullScreenIntent": true,
+            "bootReceiver": true
+          }
         }
       ]
     ],
