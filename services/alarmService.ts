@@ -20,7 +20,7 @@ const ALARM_PREFIX = "sleep_alarm_";
 export const alarmService = {
   /**
    * Schedule a daily repeating alarm
-   * ✅ FIX: Simplified parameters to avoid "repeating" error
+   * ✅ FIX: Added ALL required parameters including 'repeating'
    */
   async scheduleSleepReminder({
     bedtime,
@@ -63,30 +63,20 @@ export const alarmService = {
       );
       console.log(`   - Date: ${alarmDate.toLocaleString()}`);
 
-      // ✅ FIX: Use minimal parameters that work
-      try {
-        await scheduleAlarm({
-          uid: alarmId,
-          day: alarmDate,
-          title: "🌙 Pengingat Tidur",
-          message: `Waktunya tidur pukul ${bedtime}! Tidur yang cukup penting untuk kesehatan.`,
-          // ✅ Simplified - only essential params
-        });
+      // ✅ FIX: Include ALL required parameters
+      await scheduleAlarm({
+        uid: alarmId,
+        day: alarmDate,
+        title: "🌙 Pengingat Tidur",
+        message: `Waktunya tidur pukul ${bedtime}! Tidur yang cukup penting untuk kesehatan.`,
+        repeating: true, // ✅ CRITICAL: Must be explicitly set
+        active: true,
+        showDismiss: true,
+        showSnooze: true,
+        snoozeInterval: 5,
+      } as any);
 
-        console.log("✅ Alarm scheduled successfully with ID:", alarmId);
-      } catch (scheduleError: any) {
-        console.error("Schedule error:", scheduleError);
-
-        // ✅ Try alternative approach without optional params
-        await scheduleAlarm({
-          uid: alarmId,
-          day: alarmDate,
-          title: "Pengingat Tidur",
-          message: `Tidur pukul ${bedtime}`,
-        });
-
-        console.log("✅ Alarm scheduled with fallback method");
-      }
+      console.log("✅ Alarm scheduled successfully with ID:", alarmId);
 
       // Save alarm ID to storage
       await this.saveAlarmId(alarmId);
@@ -114,13 +104,6 @@ export const alarmService = {
             },
           ]
         );
-      } else if (
-        error.message?.includes("repeating") ||
-        error.message?.includes("hostfunction")
-      ) {
-        // This specific error - try to schedule for next 7 days manually
-        console.log("🔄 Trying alternative scheduling method...");
-        return await this.scheduleMultipleDays(bedtime, reminderBefore, userId);
       } else {
         Alert.alert(
           "Error",
@@ -171,7 +154,12 @@ export const alarmService = {
             day: alarmDate,
             title: "🌙 Pengingat Tidur",
             message: `Waktunya tidur pukul ${bedtime}!`,
-          });
+            repeating: true, // ✅ Required parameter
+            active: true,
+            showDismiss: true,
+            showSnooze: true,
+            snoozeInterval: 5,
+          } as any);
 
           alarmIds.push(alarmId);
           await this.saveAlarmId(alarmId);
@@ -382,13 +370,18 @@ export const alarmService = {
 
       console.log("🧪 Scheduling test alarm for:", testDate.toLocaleString());
 
-      // ✅ Minimal params for test
+      // ✅ Include all required parameters
       await scheduleAlarm({
         uid: testId,
         day: testDate,
         title: "Test Alarm",
         message: "Alarm berfungsi!",
-      });
+        repeating: false, // ✅ One-time alarm for testing
+        active: true,
+        showDismiss: true,
+        showSnooze: true,
+        snoozeInterval: 5,
+      } as any);
 
       console.log("✅ Test alarm scheduled");
 

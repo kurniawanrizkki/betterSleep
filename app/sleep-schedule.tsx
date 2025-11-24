@@ -18,7 +18,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { sleepScheduleService } from '../services/sleepSchedule';
-import { alarmService } from '../services/alarmService'; // ✅ Changed
+import { alarmService } from '../services/alarmService';
 import { Database } from '../types/database.types';
 
 type SleepSchedule = Database['public']['Tables']['sleep_schedules']['Row'];
@@ -64,7 +64,6 @@ export default function SleepScheduleScreen() {
         setReminderBefore(data.reminder_before);
       }
 
-      // ✅ Check alarm status
       const status = await alarmService.checkAlarmStatus();
       setAlarmStatus(status);
       
@@ -134,7 +133,6 @@ export default function SleepScheduleScreen() {
         await sleepScheduleService.upsert(scheduleData);
       }
 
-      // Reload to get updated status
       await loadSchedule();
       
       const status = await alarmService.checkAlarmStatus();
@@ -142,7 +140,7 @@ export default function SleepScheduleScreen() {
       
       Alert.alert(
         '✅ Jadwal Berhasil Disimpan!',
-        `⏰ Waktu Tidur: ${bedtime}\n⏰ Waktu Bangun: ${wakeTime}\n🕒 Durasi: ${calculateSleepDuration()}\n\n${
+        `⏰ Waktu Tidur: ${bedtime}\n⏰ Waktu Bangun: ${wakeTime}\n🕐 Durasi: ${calculateSleepDuration()}\n\n${
           reminderEnabled 
             ? `🔔 ALARM AKTIF!\n\n` +
               `📍 Alarm akan berbunyi: ${timeInfo.alarmTimeString}\n` +
@@ -207,7 +205,6 @@ export default function SleepScheduleScreen() {
     );
   }
 
-  // ✅ Get alarm preview
   const alarmPreview = reminderEnabled 
     ? alarmService.calculateTimeUntilAlarm(bedtime, reminderBefore)
     : null;
@@ -238,9 +235,10 @@ export default function SleepScheduleScreen() {
 
         <ScrollView 
           style={styles.content}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* ✅ Alarm Status Card */}
+          {/* Alarm Status Card */}
           {alarmStatus && (
             <View style={[
               styles.statusCard,
@@ -267,7 +265,7 @@ export default function SleepScheduleScreen() {
             </View>
           )}
 
-          {/* ✅ Alarm Preview */}
+          {/* Alarm Preview */}
           {reminderEnabled && alarmPreview && (
             <View style={[styles.alarmPreviewCard, { backgroundColor: colors.card }]}>
               <Text style={[styles.alarmPreviewTitle, { color: colors.text }]}>⏰ Preview Alarm</Text>
@@ -284,7 +282,7 @@ export default function SleepScheduleScreen() {
                 ]}>
                   {alarmPreview.isPast 
                     ? '⚠️ Waktu sudah lewat! Pilih waktu yang lebih lama.'
-                    : `🕒 ${alarmPreview.text}`
+                    : `🕐 ${alarmPreview.text}`
                   }
                 </Text>
                 <Text style={[styles.alarmPreviewDetail, { color: colors.secondaryText }]}>
@@ -480,57 +478,273 @@ export default function SleepScheduleScreen() {
   );
 }
 
-// Styles sama seperti sebelumnya...
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingTop: 50, paddingBottom: 30, paddingHorizontal: 20 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  testButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700' },
-  placeholder: { width: 40 },
-  headerSubtitle: { fontSize: 14, textAlign: 'center', opacity: 0.9 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingTop: 100 },
-  loadingText: { fontSize: 16, fontWeight: '500' },
-  content: { flex: 1, padding: 20 },
-  statusCard: { borderRadius: 16, padding: 20, marginBottom: 20, borderLeftWidth: 4 },
-  statusTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  statusMessage: { fontSize: 14, lineHeight: 20 },
-  statusNextAlarm: { fontSize: 13, fontWeight: '600', marginTop: 8 },
-  alarmPreviewCard: { borderRadius: 16, padding: 20, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: '#4CAF50' },
-  alarmPreviewTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  alarmPreviewContent: { gap: 8 },
-  alarmPreviewLabel: { fontSize: 14 },
-  alarmPreviewTime: { fontSize: 28, fontWeight: '800' },
-  alarmPreviewCountdown: { fontSize: 14, fontWeight: '600' },
-  alarmPreviewDetail: { fontSize: 12, opacity: 0.8 },
-  durationCard: { borderRadius: 20, padding: 24, alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
-  durationLabel: { fontSize: 14, opacity: 0.9, marginBottom: 8 },
-  durationValue: { fontSize: 32, fontWeight: '800', marginBottom: 12 },
-  qualityBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, gap: 6 },
-  qualityDot: { width: 8, height: 8, borderRadius: 4 },
-  qualityText: { fontSize: 13, fontWeight: '700' },
-  timeCard: { borderRadius: 20, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  timeCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  timeIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  timeInfo: { flex: 1 },
-  timeLabel: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  timeDescription: { fontSize: 13 },
-  timePicker: { marginTop: 12 },
-  timePickerContent: { gap: 8, paddingHorizontal: 4 },
-  timeOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
-  timeOptionText: { fontSize: 15, fontWeight: '600' },
-  reminderCard: { borderRadius: 20, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  reminderHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  reminderTitle: { fontSize: 16, fontWeight: '700' },
-  reminderOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  reminderOptionLabel: { fontSize: 15, fontWeight: '600' },
-  reminderTimeButtons: { flexDirection: 'row', gap: 8 },
-  reminderTimeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
-  reminderTimeButtonText: { fontSize: 14, fontWeight: '600' },
-  infoBox: { borderRadius: 12, padding: 16, marginTop: 16 },
-  infoText: { fontSize: 13, lineHeight: 20 },
-  saveButton: { paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
-  saveButtonDisabled: { opacity: 0.6 },
-  saveButtonText: { fontSize: 16, fontWeight: '700' },
+  container: { 
+    flex: 1 
+  },
+  header: { 
+    paddingTop: 50, 
+    paddingBottom: 30, 
+    paddingHorizontal: 20 
+  },
+  headerContent: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    marginBottom: 10 
+  },
+  backButton: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  testButton: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  headerTitle: { 
+    fontSize: 20, 
+    fontWeight: '700' 
+  },
+  placeholder: { 
+    width: 40 
+  },
+  headerSubtitle: { 
+    fontSize: 14, 
+    textAlign: 'center', 
+    opacity: 0.9 
+  },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    gap: 16, 
+    paddingTop: 100 
+  },
+  loadingText: { 
+    fontSize: 16, 
+    fontWeight: '500' 
+  },
+  content: { 
+    flex: 1 
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 120, // ✅ Extra padding untuk button tidak terhalang
+  },
+  statusCard: { 
+    borderRadius: 16, 
+    padding: 20, 
+    marginBottom: 20, 
+    borderLeftWidth: 4 
+  },
+  statusTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 8 
+  },
+  statusMessage: { 
+    fontSize: 14, 
+    lineHeight: 20 
+  },
+  statusNextAlarm: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    marginTop: 8 
+  },
+  alarmPreviewCard: { 
+    borderRadius: 16, 
+    padding: 20, 
+    marginBottom: 20, 
+    borderLeftWidth: 4, 
+    borderLeftColor: '#4CAF50' 
+  },
+  alarmPreviewTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 12 
+  },
+  alarmPreviewContent: { 
+    gap: 8 
+  },
+  alarmPreviewLabel: { 
+    fontSize: 14 
+  },
+  alarmPreviewTime: { 
+    fontSize: 28, 
+    fontWeight: '800' 
+  },
+  alarmPreviewCountdown: { 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
+  alarmPreviewDetail: { 
+    fontSize: 12, 
+    opacity: 0.8 
+  },
+  durationCard: { 
+    borderRadius: 20, 
+    padding: 24, 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 10, 
+    elevation: 8 
+  },
+  durationLabel: { 
+    fontSize: 14, 
+    opacity: 0.9, 
+    marginBottom: 8 
+  },
+  durationValue: { 
+    fontSize: 32, 
+    fontWeight: '800', 
+    marginBottom: 12 
+  },
+  qualityBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingVertical: 6, 
+    borderRadius: 20, 
+    gap: 6 
+  },
+  qualityDot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4 
+  },
+  qualityText: { 
+    fontSize: 13, 
+    fontWeight: '700' 
+  },
+  timeCard: { 
+    borderRadius: 20, 
+    padding: 20, 
+    marginBottom: 16, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
+  timeCardHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 16 
+  },
+  timeIcon: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 12 
+  },
+  timeInfo: { 
+    flex: 1 
+  },
+  timeLabel: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 2 
+  },
+  timeDescription: { 
+    fontSize: 13 
+  },
+  timePicker: { 
+    marginTop: 12 
+  },
+  timePickerContent: { 
+    gap: 8, 
+    paddingHorizontal: 4 
+  },
+  timeOption: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 12 
+  },
+  timeOptionText: { 
+    fontSize: 15, 
+    fontWeight: '600' 
+  },
+  reminderCard: { 
+    borderRadius: 20, 
+    padding: 20, 
+    marginBottom: 16, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
+  reminderHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 16 
+  },
+  reminderTitle: { 
+    fontSize: 16, 
+    fontWeight: '700' 
+  },
+  reminderOption: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingVertical: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F0F0F0' 
+  },
+  reminderOptionLabel: { 
+    fontSize: 15, 
+    fontWeight: '600' 
+  },
+  reminderTimeButtons: { 
+    flexDirection: 'row', 
+    gap: 8 
+  },
+  reminderTimeButton: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 10 
+  },
+  reminderTimeButtonText: { 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
+  infoBox: { 
+    borderRadius: 12, 
+    padding: 16, 
+    marginTop: 16 
+  },
+  infoText: { 
+    fontSize: 13, 
+    lineHeight: 20 
+  },
+  saveButton: { 
+    paddingVertical: 18, 
+    borderRadius: 16, 
+    alignItems: 'center', 
+    marginBottom: 40, // ✅ Extra margin bottom
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 8, 
+    elevation: 5 
+  },
+  saveButtonDisabled: { 
+    opacity: 0.6 
+  },
+  saveButtonText: { 
+    fontSize: 16, 
+    fontWeight: '700' 
+  },
 });
