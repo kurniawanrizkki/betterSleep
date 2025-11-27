@@ -14,24 +14,22 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext'; // ✅
-import { sleepRecordsService } from '../services/sleepRecords';
+import { useTheme } from '../contexts/ThemeContext';
+import { enhancedSleepRecordsService } from '../services/sleepRecords';
 import { Database } from '../types/database.types';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 type SleepRecord = Database['public']['Tables']['sleep_records']['Row'];
 
-// ❌ Hapus semua const colors = { ... }
-
 export default function StatisticsDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors, theme } = useTheme(); // ✅
+  const { colors, theme } = useTheme();
 
   const [period, setPeriod] = useState<'week' | 'month'>('week');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // ✅ Diperbaiki: "refreshing" (bukan "refreshiSng")
   const [sleepRecords, setSleepRecords] = useState<SleepRecord[]>([]);
 
   useEffect(() => {
@@ -44,7 +42,10 @@ export default function StatisticsDetailScreen() {
     try {
       setLoading(true);
       const days = period === 'week' ? 7 : 30;
-      const stats = await sleepRecordsService.getStatistics(user!.id, days);
+      const stats = await enhancedSleepRecordsService.getStatisticsWithSchedule(
+        user!.id,
+        days
+      );
       setSleepRecords(stats.records);
     } catch (error: any) {
       console.error('Error loading sleep records:', error);
@@ -63,7 +64,7 @@ export default function StatisticsDetailScreen() {
     const date = new Date(record.date + 'T00:00:00');
     return {
       date: record.date,
-      day: period === 'week' 
+      day: period === 'week'
         ? ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][date.getDay()]
         : date.getDate(),
       hours: record.hours,
@@ -74,39 +75,38 @@ export default function StatisticsDetailScreen() {
   const avgSleep = sleepRecords.length > 0
     ? (sleepRecords.reduce((sum, d) => sum + d.hours, 0) / sleepRecords.length).toFixed(1)
     : '0.0';
-  
+
   const maxSleep = sleepRecords.length > 0
     ? Math.max(...sleepRecords.map(d => d.hours)).toFixed(1)
     : '0.0';
-  
+
   const minSleep = sleepRecords.length > 0
     ? Math.min(...sleepRecords.map(d => d.hours)).toFixed(1)
     : '0.0';
-  
+
   const goodDays = sleepRecords.filter(d => d.hours >= 7.5).length;
   const avgDays = sleepRecords.filter(d => d.hours >= 6.5 && d.hours < 7.5).length;
   const poorDays = sleepRecords.filter(d => d.hours < 6.5).length;
-  
+
   const consistency = sleepRecords.length > 0
     ? ((goodDays / sleepRecords.length) * 100).toFixed(0)
     : '0';
-  
+
   const halfPoint = Math.floor(sleepRecords.length / 2);
   const firstHalf = sleepRecords.slice(0, halfPoint);
   const secondHalf = sleepRecords.slice(halfPoint);
-  
+
   const firstAvg = firstHalf.length > 0
     ? firstHalf.reduce((sum, d) => sum + d.hours, 0) / firstHalf.length
     : 0;
-  
+
   const secondAvg = secondHalf.length > 0
     ? secondHalf.reduce((sum, d) => sum + d.hours, 0) / secondHalf.length
     : 0;
-  
+
   const trend = secondAvg > firstAvg ? 'up' : 'down';
   const trendValue = Math.abs(secondAvg - firstAvg).toFixed(1);
 
-  // ✅ Gradient disesuaikan dengan tema
   const headerGradient = theme === 'dark'
     ? ['#1A2A3A', '#253746']
     : ['#6B9DC3', '#8FB3D5'];
@@ -116,7 +116,7 @@ export default function StatisticsDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <LinearGradient colors={headerGradient} style={styles.header}>
           <View style={styles.headerContent}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
               onPress={() => router.back()}
             >
@@ -145,7 +145,7 @@ export default function StatisticsDetailScreen() {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={headerGradient} style={styles.header}>
           <View style={styles.headerContent}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
               onPress={() => router.back()}
             >
@@ -159,7 +159,7 @@ export default function StatisticsDetailScreen() {
           </Text>
         </LinearGradient>
 
-        <ScrollView 
+        <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -241,7 +241,7 @@ export default function StatisticsDetailScreen() {
                     </View>
                   </View>
                   <Text style={[styles.trendDescription, { color: colors.secondaryText }]}>
-                    {trend === 'up' 
+                    {trend === 'up'
                       ? `Bagus! Durasi tidur meningkat ${trendValue} jam dibanding periode sebelumnya.`
                       : `Perhatian! Durasi tidur menurun ${trendValue} jam dibanding periode sebelumnya.`
                     }
@@ -250,8 +250,8 @@ export default function StatisticsDetailScreen() {
 
                 <View style={[styles.chartCard, { backgroundColor: colors.card }]}>
                   <Text style={[styles.chartTitle, { color: colors.text }]}>Grafik Tidur</Text>
-                  <ScrollView 
-                    horizontal 
+                  <ScrollView
+                    horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.chartScrollContent}
                   >
@@ -259,12 +259,12 @@ export default function StatisticsDetailScreen() {
                       {processedData.map((item, index) => {
                         const maxHours = Math.max(...processedData.map(d => d.hours), 8);
                         const height = (item.hours / maxHours) * 150;
-                        const barColor = item.hours >= 7.5 
-                          ? colors.primary 
-                          : item.hours >= 6.5 
-                            ? colors.accent 
+                        const barColor = item.hours >= 7.5
+                          ? colors.primary
+                          : item.hours >= 6.5
+                            ? colors.accent
                             : colors.border;
-                        
+
                         return (
                           <View key={index} style={styles.barWrapper}>
                             <Text style={[styles.barHours, { color: colors.text }]}>{item.hours}h</Text>
@@ -314,7 +314,7 @@ export default function StatisticsDetailScreen() {
                   </View>
                   <View style={[styles.detailStatRow, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.detailStatLabel, { color: colors.secondaryText }]}>Target Harian</Text>
-                    <Text style={[styles.detailStatValue, { color: colors.text }]}>\>8 jam</Text>
+                    <Text style={[styles.detailStatValue, { color: colors.text }]}>≥8 jam</Text>
                   </View>
                   <View style={[styles.detailStatRow, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.detailStatLabel, { color: colors.secondaryText }]}>Hari Mencapai Target</Text>
@@ -324,7 +324,7 @@ export default function StatisticsDetailScreen() {
 
                 <View style={[
                   styles.recommendationCard,
-                  { 
+                  {
                     backgroundColor: theme === 'dark' ? colors.warning + '20' : '#FFF9E6',
                     borderLeftColor: colors.warning
                   }

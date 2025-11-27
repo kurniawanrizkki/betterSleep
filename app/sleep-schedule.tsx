@@ -126,7 +126,11 @@ export default function SleepScheduleScreen() {
         reminder_before: reminderBefore,
         active: true,
       };
-
+      await alarmService.saveAlarmMetadata(
+        user.id,
+        bedtime,
+        wakeTime // ✅ Pass wake_time yang sudah ada
+      );
       if (schedule) {
         await sleepScheduleService.update(schedule.id, scheduleData);
       } else {

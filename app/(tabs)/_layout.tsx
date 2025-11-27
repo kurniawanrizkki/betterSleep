@@ -7,6 +7,7 @@ import { notificationService } from '../../services/notificationService';
 import { sleepScheduleService } from '../../services/sleepSchedule';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdmin } from '../../hooks/useAdmin';
+import { backgroundTaskService } from '../../services/backgroundTasks';
 
 export default function TabLayout() {
   const { user } = useAuth();
@@ -15,21 +16,8 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    const initNotifications = async () => {
-      if (user) {
-        const schedule = await sleepScheduleService.getActive(user.id);
-        if (schedule && schedule.reminder_enabled) {
-          await notificationService.scheduleSleepReminder({
-            bedtime: schedule.bedtime,
-            reminderBefore: schedule.reminder_before,
-            reminderType: schedule.reminder_type,
-            userId: user.id,
-          });
-        }
-      }
-    };
-    initNotifications();
-  }, [user]);
+      backgroundTaskService.registerBackgroundTask();
+ }, []);
 
   const showAdminTab = !adminLoading && isAdmin;
 

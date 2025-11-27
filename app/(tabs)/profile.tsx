@@ -23,9 +23,11 @@ import {
     View
 } from 'react-native';
 import { AppColors } from '../../constants/theme';
-import { useAuth } from '../../contexts/AuthContext';
 import { ThemePreference, useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { backgroundTaskService } from '../../services/backgroundTasks';
+
 
 interface UserProfile {
   id: string;
@@ -249,14 +251,7 @@ export default function ProfileScreen() {
                             value={`${stats.avgSleep} Jam`}
                             label="Tidur Rata-Rata"
                             colors={colors}
-                        />
-                        <StatCard 
-                            icon={<Moon size={20} color={colors.textLight} />}
-                            iconBg={colors.warning}
-                            value={stats.lastMeditated}
-                            label="Meditasi Terakhir"
-                            colors={colors}
-                        />
+                          />
                     </View>
                 </View>
 
